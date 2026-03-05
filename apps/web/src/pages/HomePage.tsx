@@ -34,7 +34,7 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-function IntentCardComponent({ card }: { card: IntentCard }) {
+function IntentCardComponent({ card, onClick }: { card: IntentCard; onClick?: () => void }) {
   return (
     <motion.div
       layout
@@ -42,6 +42,7 @@ function IntentCardComponent({ card }: { card: IntentCard }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       whileHover={{ scale: 1.01 }}
+      onClick={onClick}
       className="p-4 rounded-xl bg-gray-800/60 border border-gray-700/50 hover:border-indigo-500/20 transition-all cursor-pointer"
     >
       <div className="flex items-start justify-between gap-3">
@@ -81,7 +82,7 @@ function IntentCardComponent({ card }: { card: IntentCard }) {
   );
 }
 
-export function HomePage() {
+export function HomePage({ onCardClick }: { onCardClick?: (intentId: string, runId: string) => void }) {
   const { getClient, state } = useConnectionStore();
   const { upsertIntent, getActiveIntents, getCompletedIntents } = useIntentStore();
 
@@ -169,7 +170,7 @@ export function HomePage() {
           <div className="flex flex-col gap-3">
             <AnimatePresence mode="popLayout">
               {active.map((card) => (
-                <IntentCardComponent key={card.intentId} card={card} />
+                <IntentCardComponent key={card.intentId} card={card} onClick={() => card.currentRunId && onCardClick?.(card.intentId, card.currentRunId)} />
               ))}
             </AnimatePresence>
           </div>
@@ -185,7 +186,7 @@ export function HomePage() {
           <div className="flex flex-col gap-3">
             <AnimatePresence mode="popLayout">
               {completed.map((card) => (
-                <IntentCardComponent key={card.intentId} card={card} />
+                <IntentCardComponent key={card.intentId} card={card} onClick={() => card.currentRunId && onCardClick?.(card.intentId, card.currentRunId)} />
               ))}
             </AnimatePresence>
           </div>
