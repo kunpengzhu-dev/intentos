@@ -8,6 +8,9 @@ build/
 .next/
 out/
 *.tsbuildinfo
+*.d.ts
+*.d.ts.map
+*.js.map
 
 # Turborepo
 .turbo/
