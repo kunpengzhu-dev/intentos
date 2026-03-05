@@ -1,0 +1,13 @@
+{
+  "extends": "../../tools/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/adapters/openclaw" }
+  ]
+}

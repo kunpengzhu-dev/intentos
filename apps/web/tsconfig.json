@@ -1,0 +1,14 @@
+{
+  "extends": "../../tools/tsconfig/react.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/protocol" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/sdk" },
+    { "path": "../../packages/ui" }
+  ]
+}

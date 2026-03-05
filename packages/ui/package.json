@@ -1,0 +1,26 @@
+{
+  "name": "@intentos/ui",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./tokens": {
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "lint": "eslint src/",
+    "typecheck": "tsc --build --noEmit",
+    "test": "echo \"no tests yet\"",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@intentos/protocol": "workspace:*"
+  },
+  "devDependencies": {}
+}

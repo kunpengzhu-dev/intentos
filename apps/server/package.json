@@ -1,0 +1,23 @@
+{
+  "name": "@intentos/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "echo \"tsx watch placeholder\"",
+    "build": "tsc --build",
+    "lint": "eslint src/",
+    "typecheck": "tsc --build --noEmit",
+    "test": "echo \"no tests yet\"",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@intentos/protocol": "workspace:*",
+    "@intentos/core": "workspace:*",
+    "@intentos/adapter-openclaw": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10"
+  }
+}
