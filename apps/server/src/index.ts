@@ -1,1 +1,36 @@
-console.log('IntentOS Server - placeholder');
+import Fastify from 'fastify';
+import fastifyWebsocket from '@fastify/websocket';
+import fastifyCors from '@fastify/cors';
+import { env } from './config/env.js';
+import { logger } from './config/logger.js';
+import { createDatabase } from './db/index.js';
+import { registerWebSocket } from './ws/server.js';
+import { registerHealthRoutes } from './http/health.js';
+import { registerDebugRoutes } from './http/debug.js';
+import { createMessageHandler } from './ws/handlers/index.js';
+import type { AppContext } from './context.js';
+
+async function main() {
+  const app = Fastify({ logger: false });
+
+  await app.register(fastifyCors, { origin: true });
+  await app.register(fastifyWebsocket);
+
+  const database = createDatabase();
+  logger.info(`Database initialized at ${env.DATABASE_URL}`);
+
+  const handler = createMessageHandler({ database } as AppContext);
+  const ctx: AppContext = { database, handleMessage: handler };
+
+  registerHealthRoutes(app);
+  registerDebugRoutes(app, database);
+  registerWebSocket(app, ctx);
+
+  await app.listen({ port: env.PORT, host: '0.0.0.0' });
+  logger.info(`Server running on http://localhost:${env.PORT}`);
+}
+
+main().catch((err) => {
+  logger.error('Server failed to start:', err);
+  process.exit(1);
+});
