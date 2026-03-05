@@ -22,5 +22,11 @@
   "dependencies": {
     "@intentos/protocol": "workspace:*"
   },
-  "devDependencies": {}
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0"
+  }
 }
