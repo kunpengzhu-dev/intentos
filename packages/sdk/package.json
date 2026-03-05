@@ -18,7 +18,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@intentos/protocol": "workspace:*"
-  },
-  "devDependencies": {}
+    "@intentos/protocol": "workspace:*",
+    "nanoid": "^5.1.6"
+  }
 }

@@ -113,6 +113,9 @@ importers:
       '@intentos/protocol':
         specifier: workspace:*
         version: link:../protocol
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
 
   packages/ui:
     dependencies:
