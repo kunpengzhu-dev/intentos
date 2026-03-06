@@ -6,9 +6,12 @@ import { logger } from './config/logger.js';
 import { createDatabase } from './db/index.js';
 import { registerWebSocket } from './ws/server.js';
 import { registerHealthRoutes } from './http/health.js';
+import { registerBootRoutes } from './http/boot.js';
 import { registerDebugRoutes } from './http/debug.js';
 import { createMessageHandler } from './ws/handlers/index.js';
 import type { AppContext } from './context.js';
+import { BootService } from './boot/service.js';
+import { createScriptBootProvider } from './boot/script-provider.js';
 
 async function main() {
   const app = Fastify({ logger: false });
@@ -19,10 +22,12 @@ async function main() {
   const database = createDatabase();
   logger.info(`Database initialized at ${env.DATABASE_URL}`);
 
-  const handler = createMessageHandler({ database } as AppContext);
-  const ctx: AppContext = { database, handleMessage: handler };
+  const bootService = new BootService(createScriptBootProvider());
+  const handler = createMessageHandler({ database, bootService } as AppContext);
+  const ctx: AppContext = { database, bootService, handleMessage: handler };
 
   registerHealthRoutes(app);
+  registerBootRoutes(app, bootService);
   registerDebugRoutes(app, database);
   registerWebSocket(app, ctx);
 

@@ -139,25 +139,8 @@ export function createMessageHandler(ctx: AppContext) {
         break;
       }
 
-      case 'boot/check': {
-        const checks = [
-          { checkId: 'server_ready', label: 'Server', state: 'ok' as const },
-          { checkId: 'agent_ready', label: 'Mock Agent', state: 'ok' as const },
-          { checkId: 'storage_ready', label: 'Storage', state: 'ok' as const },
-        ];
-
-        for (let i = 0; i < checks.length; i++) {
-          sendEnvelope(session.ws, {
-            id: nanoid(), version: 1, kind: 'notify', type: 'boot/progress',
-            ts: Date.now(),
-            payload: { ...checks[i], step: i + 1, total: checks.length },
-          });
-        }
-
-        sendEnvelope(session.ws, {
-          id: nanoid(), version: 1, kind: 'notify', type: 'boot/ready',
-          ts: Date.now(), payload: {},
-        });
+      case 'boot/start': {
+        void ctx.bootService.handleStart(session, envelope);
         break;
       }
 

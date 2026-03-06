@@ -701,19 +701,23 @@ server 收到 cursor 时检查 `v` 兼容性和 stream 有效性，不兼容时�
 
 **引导启动 [E]（不参与 cursor/重放/event store）：**
 
-- `boot/check` CMD — 请求启动检查
-- `boot/progress` NOTIFY — `{ checkId, label, state: 'running' | 'ok' | 'fail', error?, step, total }`
-- `boot/ready` NOTIFY — 启动完成
+- `boot/start` CMD + ACK — 请求启动本次 boot，返回 `{ status, steps }`
+- `POST /internal/boot/steps` — 外部 boot provider 上报本次 boot 的步骤定义；server 收到后再返回 `boot/start` 的 ACK
+- `boot/step.updated` NOTIFY — `{ stepId, state: 'pending' | 'running' | 'ok' | 'failed', message?, error?, updatedAt }`
+- `boot/completed` NOTIFY — `{ completedAt }`
+- `boot/failed` NOTIFY — `{ stepId?, reason, failedAt }`
 
 Boot 事件全部 `replayable: false`，`stream: null`。**server 不允许将 boot 事件写入 event store，不分配 streamId/serverSeq，不参与 cursor。** UI 刷新时 boot 重新执行即可（这是预期行为）。
 
-Boot 检查项（最小可验证集合）：
+外部 boot provider 如需通过 HTTP 回调 server，使用 server 内部生成的短期 `bootToken` 进行鉴权与关联；前端不感知该 token。
+
+Boot 步骤定义（最小可验证集合）：
 
 - `server_ready`：本地服务/WebSocket 连接可用
 - `agent_ready`：server 侧至少有一个可用的 agent runtime（真 OpenClaw 或 mock echo agent）。原型期 mock agent 必须内置且默认启用，确保社区用户无需安装 OpenClaw 即可进入主界面。真 OpenClaw 可用时显示增强信息 "OpenClaw connected"。
 - `storage_ready`：SQLite 可写、迁移成功
 
-每项独立上报 `boot/progress`，任一项 `state: 'fail'` 则显示错误并允许重试，全部 `ok` 后发 `boot/ready`。
+前端根据 `steps` 自行计算进度。每项独立上报 `boot/step.updated`，任一项失败则发 `boot/failed`，全部 `ok` 后发 `boot/completed`。
 
 **意图级（intent/* → Global stream）：**
 
@@ -982,4 +986,3 @@ BFF 不做**业务意图**分类或 agent 路由；但 BFF 是**协议与安全�
 - CI/CD pipeline
 - 异常处理和边缘情况
 - 性能优化和体验打磨
-

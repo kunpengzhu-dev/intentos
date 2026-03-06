@@ -1,14 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { AppBackdrop, Surface } from '@intentos/ui/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { Envelope } from '@intentos/protocol';
+import type {
+  BootCompletedPayload,
+  BootFailedPayload,
+  BootStartAckPayload,
+  BootStepUpdatedPayload,
+  Envelope,
+} from '@intentos/protocol';
 import mercuryBackground from '../../assets/backgrounds/mercury-background.jpg';
-import { useBootStore, type BootCheck } from '../../store/boot';
+import { useBootStore } from '../../store/boot';
 import { useConnectionStore } from '../../store/connection';
 import { BootCheckItem } from './components/BootCheckItem';
 
 export function BootPage({ onReady }: { onReady: () => void }) {
-  const { phase, checks, setPhase, updateCheck } = useBootStore();
+  const { phase, checks, progress, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
   const { init, getClient, state } = useConnectionStore();
   const bootSent = useRef(false);
 
@@ -24,23 +30,34 @@ export function BootPage({ onReady }: { onReady: () => void }) {
 
     const client = getClient();
 
-    const offProgress = client.on('boot/progress', (env: Envelope) => {
-      const p = env.payload as { checkId: string; label: string; state: string; error?: string };
-      updateCheck({ checkId: p.checkId, label: p.label, state: p.state as BootCheck['state'], error: p.error });
+    const offStepUpdated = client.on('boot/step.updated', (env: Envelope) => {
+      updateCheck(env.payload as BootStepUpdatedPayload);
     });
 
-    const offReady = client.on('boot/ready', () => {
+    const offCompleted = client.on('boot/completed', (env: Envelope) => {
+      void (env.payload as BootCompletedPayload);
       setPhase('ready');
       setTimeout(onReady, 900);
     });
 
-    client.sendFire('boot/check', {});
+    const offFailed = client.on('boot/failed', (env: Envelope) => {
+      void (env.payload as BootFailedPayload);
+      failBoot();
+    });
+
+    client.send('boot/start', {}).then((env) => {
+      startBoot(env.payload as BootStartAckPayload);
+    }).catch(() => {
+      failBoot();
+    });
 
     return () => {
-      offProgress();
-      offReady();
+      offStepUpdated();
+      offCompleted();
+      offFailed();
+      reset();
     };
-  }, [state]);
+  }, [failBoot, getClient, onReady, reset, setPhase, startBoot, state, updateCheck]);
 
   return (
     <div className="flex h-full w-full items-center justify-center px-6 isolate">
@@ -68,8 +85,15 @@ export function BootPage({ onReady }: { onReady: () => void }) {
         </div>
 
         <div className="space-y-3">
+          <div className="mb-4 overflow-hidden rounded-full bg-white/55">
+            <motion.div
+              className="h-2 rounded-full bg-slate-900"
+              animate={{ width: `${Math.max(progress * 100, phase === 'ready' ? 100 : 6)}%` }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            />
+          </div>
           {checks.map((check, index) => (
-            <BootCheckItem key={check.checkId} check={check} index={index} />
+            <BootCheckItem key={check.id} check={check} index={index} />
           ))}
         </div>
 

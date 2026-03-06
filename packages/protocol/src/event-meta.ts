@@ -9,9 +9,10 @@ export const EVENT_META: Record<string, EventMetaEntry> = {
   'auth/handshake_ok': { replayable: false, stream: null, since: 1 },
   'auth/handshake_failed': { replayable: false, stream: null, since: 1 },
 
-  'boot/check': { replayable: false, stream: null, since: 1 },
-  'boot/progress': { replayable: false, stream: null, since: 1 },
-  'boot/ready': { replayable: false, stream: null, since: 1 },
+  'boot/start': { replayable: false, stream: null, since: 1 },
+  'boot/step.updated': { replayable: false, stream: null, since: 1 },
+  'boot/completed': { replayable: false, stream: null, since: 1 },
+  'boot/failed': { replayable: false, stream: null, since: 1 },
 
   'intent/create': { replayable: false, stream: null, since: 1 },
   'intent/create_ack': { replayable: false, stream: null, since: 1 },

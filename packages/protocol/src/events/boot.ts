@@ -1,12 +1,32 @@
-export type BootCheckPayload = Record<string, never>;
-
-export type BootProgressPayload = {
-  checkId: string;
+export type BootStep = {
+  id: string;
   label: string;
-  state: 'running' | 'ok' | 'fail';
-  error?: string;
-  step: number;
-  total: number;
+  weight?: number;
 };
 
-export type BootReadyPayload = Record<string, never>;
+export type BootStepState = 'pending' | 'running' | 'ok' | 'failed';
+
+export type BootStartPayload = Record<string, never>;
+
+export type BootStartAckPayload = {
+  status: 'started' | 'already_started';
+  steps: BootStep[];
+};
+
+export type BootStepUpdatedPayload = {
+  stepId: string;
+  state: BootStepState;
+  message?: string;
+  error?: string;
+  updatedAt: string;
+};
+
+export type BootCompletedPayload = {
+  completedAt: string;
+};
+
+export type BootFailedPayload = {
+  stepId?: string;
+  reason: string;
+  failedAt: string;
+};

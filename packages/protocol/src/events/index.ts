@@ -1,5 +1,13 @@
 export type { HandshakePayload, HandshakeOkPayload, HandshakeFailedPayload } from './auth.js';
-export type { BootCheckPayload, BootProgressPayload, BootReadyPayload } from './boot.js';
+export type {
+  BootStep,
+  BootStepState,
+  BootStartPayload,
+  BootStartAckPayload,
+  BootStepUpdatedPayload,
+  BootCompletedPayload,
+  BootFailedPayload,
+} from './boot.js';
 export type { ChatSendPayload, ChatDeltaPayload } from './chat.js';
 export type {
   IntentCreatePayload,
