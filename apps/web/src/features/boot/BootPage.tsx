@@ -1,6 +1,4 @@
-import { useEffect, useRef } from 'react';
-import { AppBackdrop, Surface } from '@intentos/ui/react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BootCompletedPayload,
   BootFailedPayload,
@@ -11,18 +9,105 @@ import type {
 import mercuryBackground from '../../assets/backgrounds/mercury-background.jpg';
 import { useBootStore } from '../../store/boot';
 import { useConnectionStore } from '../../store/connection';
-import { BootCheckItem } from './components/BootCheckItem';
+import type { AnimationController, TransitionState } from './os1-animation';
+import type { OrbTransitionState } from '../../App';
 
-export function BootPage({ onReady }: { onReady: () => void }) {
+const INTRO_TEXT = '你好，我是小艺。';
+const WELCOME_TEXT = '欢迎来到AIOS';
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function BootPage({
+  onReady,
+  onOrbTransitionChange,
+}: {
+  onReady: () => void;
+  onOrbTransitionChange: (next: Partial<OrbTransitionState>) => void;
+}) {
   const { phase, checks, progress, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
   const { init, getClient, state } = useConnectionStore();
   const bootSent = useRef(false);
+  const sequenceStarted = useRef(false);
+  const animationController = useRef<AnimationController | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const aiOpacityRef = useRef(0);
+  const orbCorneredRef = useRef(false);
+
+  const [transitionState, setTransitionState] = useState<TransitionState>({ glowOpacity: 0, aiOpacity: 0 });
+  const [loadingPanelHidden, setLoadingPanelHidden] = useState(false);
+  const [welcomeText, setWelcomeText] = useState('');
+  const [welcomeTone, setWelcomeTone] = useState<'hidden' | 'show' | 'hide'>('hidden');
+  const [backgroundRevealed, setBackgroundRevealed] = useState(false);
+  const [orbCornered, setOrbCornered] = useState(false);
+
+  const effectiveProgress = phase === 'ready' ? 1 : progress;
+  const percentageLabel = `${(effectiveProgress * 100).toFixed(1)}%`;
+  const loadingLabel = phase === 'failed' ? 'Failed' : effectiveProgress >= 1 ? 'Ready' : 'Loading';
+
+  const failureText = useMemo(() => {
+    const failedCheck = checks.find((check) => check.state === 'failed');
+    return failedCheck?.error ?? 'Startup checks failed. Please inspect the failed subsystem and retry.';
+  }, [checks]);
+
+  const resetSequenceVisuals = () => {
+    sequenceStarted.current = false;
+    setLoadingPanelHidden(false);
+    setTransitionState({ glowOpacity: 0, aiOpacity: 0 });
+    setWelcomeText('');
+    setWelcomeTone('hidden');
+    setBackgroundRevealed(false);
+    setOrbCornered(false);
+  };
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    let cancelled = false;
+
+    void import('./os1-animation').then(({ createOs1Animation }) => {
+      if (cancelled || !wrapRef.current) return;
+
+      const controller = createOs1Animation(wrapRef.current, (next) => {
+        setTransitionState(next);
+      });
+
+      animationController.current = controller;
+      controller.setTransformation(effectiveProgress >= 1);
+    });
+
+    return () => {
+      cancelled = true;
+      animationController.current?.dispose();
+      animationController.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    animationController.current?.setTransformation(effectiveProgress >= 1 && phase !== 'failed');
+  }, [effectiveProgress, phase]);
+
+  useEffect(() => {
+    aiOpacityRef.current = transitionState.aiOpacity;
+  }, [transitionState.aiOpacity]);
+
+  useEffect(() => {
+    orbCorneredRef.current = orbCornered;
+  }, [orbCornered]);
+
+  useEffect(() => {
+    onOrbTransitionChange({
+      mode: 'boot',
+      opacity: orbCornered ? 1 : transitionState.aiOpacity,
+      cornered: orbCornered,
+    });
+  }, [onOrbTransitionChange, orbCornered, transitionState.aiOpacity]);
 
   useEffect(() => {
     init();
     const client = getClient();
     client.connect();
-  }, []);
+  }, [getClient, init]);
 
   useEffect(() => {
     if (state !== 'connected' || bootSent.current) return;
@@ -37,7 +122,6 @@ export function BootPage({ onReady }: { onReady: () => void }) {
     const offCompleted = client.on('boot/completed', (env: Envelope) => {
       void (env.payload as BootCompletedPayload);
       setPhase('ready');
-      setTimeout(onReady, 900);
     });
 
     const offFailed = client.on('boot/failed', (env: Envelope) => {
@@ -55,75 +139,121 @@ export function BootPage({ onReady }: { onReady: () => void }) {
       offStepUpdated();
       offCompleted();
       offFailed();
+      bootSent.current = false;
       reset();
     };
-  }, [failBoot, getClient, onReady, reset, setPhase, startBoot, state, updateCheck]);
+  }, [failBoot, getClient, reset, setPhase, startBoot, state, updateCheck]);
+
+  useEffect(() => {
+    if (phase === 'failed') {
+      resetSequenceVisuals();
+      return;
+    }
+
+    if (phase !== 'ready' || sequenceStarted.current) return;
+    sequenceStarted.current = true;
+
+    const sleep = (ms: number) => new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+    const waitFor = async (predicate: () => boolean, timeoutMs = 2200, intervalMs = 60) => {
+      const start = performance.now();
+      while (!predicate()) {
+        if (performance.now() - start > timeoutMs) break;
+        await sleep(intervalMs);
+      }
+    };
+
+    let cancelled = false;
+
+    void (async () => {
+      await sleep(260);
+      if (cancelled) return;
+      setLoadingPanelHidden(true);
+
+      await waitFor(() => aiOpacityRef.current >= 0.9 && !orbCorneredRef.current);
+      if (cancelled) return;
+
+      await sleep(1000);
+      if (cancelled) return;
+      setWelcomeText(INTRO_TEXT);
+      setWelcomeTone('show');
+
+      await sleep(3250);
+      if (cancelled) return;
+      setWelcomeTone('hide');
+
+      await sleep(560);
+      if (cancelled) return;
+      setWelcomeText(WELCOME_TEXT);
+      setWelcomeTone('show');
+
+      await sleep(3250);
+      if (cancelled) return;
+      setWelcomeTone('hide');
+
+      await sleep(560);
+      if (cancelled) return;
+      setWelcomeText('');
+
+      await waitFor(() => aiOpacityRef.current >= 0.9 && !orbCorneredRef.current);
+      if (cancelled) return;
+      setBackgroundRevealed(true);
+
+      await sleep(2000);
+      if (cancelled) return;
+
+      await sleep(260);
+      if (cancelled) return;
+      setOrbCornered(true);
+
+      await sleep(800);
+      if (cancelled) return;
+      onReady();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onReady, phase]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center px-6 isolate">
-      <AppBackdrop backgroundImageUrl={mercuryBackground} className="-z-10" />
+    <div className="os1-container">
+      <div className="boot-screen__backdrop" />
+      <div ref={wrapRef} id="wrap" />
+      <img
+        src={mercuryBackground}
+        alt=""
+        className={`final-background ${backgroundRevealed ? 'reveal' : ''}`}
+      />
 
-      <Surface
-        as={motion.div}
-        variant="panel"
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-        className="relative z-10 w-full max-w-xl rounded-[2.25rem] px-7 py-8 md:px-9"
+      <div
+        className="transition-glow-stage"
+        aria-hidden="true"
+        style={{ opacity: transitionState.glowOpacity }}
       >
-        <div className="mb-8 flex items-start justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-slate-400">IntentOS boot</p>
-            <h1 className="mt-3 text-4xl font-light leading-none text-slate-800">Preparing your workspace</h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">
-              Connecting the runtime, storage, and agent bridge before handing control to the main surface.
-            </p>
-          </div>
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-base font-semibold text-white shadow-lg shadow-slate-300/50">
-            IO
-          </div>
+        <div className="transition-glow-sphere" />
+      </div>
+
+      <div className={`welcome-text ${welcomeTone === 'show' ? 'show' : ''} ${welcomeTone === 'hide' ? 'hide' : ''}`}>
+        {welcomeText}
+      </div>
+
+      <div className={`loading-panel ${loadingPanelHidden ? 'fade-out' : ''}`}>
+        <div className="loading-meta">
+          <span id="loadingLabel">{loadingLabel}</span>
+          <span id="countdown">{percentageLabel}</span>
         </div>
-
-        <div className="space-y-3">
-          <div className="mb-4 overflow-hidden rounded-full bg-white/55">
-            <motion.div
-              className="h-2 rounded-full bg-slate-900"
-              animate={{ width: `${Math.max(progress * 100, phase === 'ready' ? 100 : 6)}%` }}
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-            />
-          </div>
-          {checks.map((check, index) => (
-            <BootCheckItem key={check.id} check={check} index={index} />
-          ))}
+        <div className="loading-bar-container" aria-label="Loading progress">
+          <div
+            id="loadingBar"
+            className="loading-bar"
+            style={{ width: `${clamp(effectiveProgress * 100, 0, 100)}%` }}
+          />
         </div>
-
-        <AnimatePresence mode="wait">
-          {phase === 'ready' && (
-            <motion.p
-              key="ready"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="mt-6 text-sm font-medium text-blue-700"
-            >
-              System ready. Opening the dashboard…
-            </motion.p>
-          )}
-          {phase === 'failed' && (
-            <motion.p
-              key="failed"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="mt-6 text-sm font-medium text-rose-700"
-            >
-              Startup checks failed. Please inspect the failed subsystem and retry.
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        <p className="mt-4 text-xs text-slate-400">{state === 'connecting' ? 'Connecting to server…' : 'Waiting for startup stream…'}</p>
-      </Surface>
+        {phase === 'failed' && <div className="loading-error">{failureText}</div>}
+        {state !== 'connected' && phase !== 'failed' && <div className="loading-hint">Connecting to server…</div>}
+      </div>
     </div>
   );
 }

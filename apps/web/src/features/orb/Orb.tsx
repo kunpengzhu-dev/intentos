@@ -1,33 +1,79 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Surface } from '@intentos/ui/react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { Envelope } from '@intentos/protocol';
+import type { OrbTransitionState } from '../../App';
 import { useChatStore } from '../../store/chat';
 import { useConnectionStore } from '../../store/connection';
 
-export function Orb() {
+export function Orb({ transition }: { transition: OrbTransitionState }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const { getClient, state } = useConnectionStore();
   const { messages, addMessage, updateLastAssistant, isStreaming } = useChatStore();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isReady = transition.mode === 'ready';
+  const visibleOpacity = transition.cornered ? 1 : transition.opacity;
+  const stageScale = transition.cornered ? 1 : 0.92 + transition.opacity * 0.08;
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+  const [dragBounds, setDragBounds] = useState({ left: 0, right: 0, top: 0, bottom: 0 });
+  const getViewportBounds = useCallback(() => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const radius = 25;
+    const baseX = vw - Math.min(70, Math.max(44, vw * 0.07));
+    const baseY = Math.min(58, Math.max(34, vh * 0.06));
+    return {
+      minX: radius - baseX,
+      maxX: vw - radius - baseX,
+      minY: radius - baseY,
+      maxY: vh - radius - baseY,
+    };
+  }, []);
+  const clampToViewport = useCallback(() => {
+    if (!isReady || !transition.cornered) return;
+    const { minX, maxX, minY, maxY } = getViewportBounds();
+    dragX.set(Math.min(maxX, Math.max(minX, dragX.get())));
+    dragY.set(Math.min(maxY, Math.max(minY, dragY.get())));
+  }, [dragX, dragY, getViewportBounds, isReady, transition.cornered]);
+
+  useEffect(() => {
+    if (!isReady) {
+      setIsOpen(false);
+      dragX.set(0);
+      dragY.set(0);
+    }
+  }, [dragX, dragY, isReady]);
+
+  useEffect(() => {
+    if (!isReady || !transition.cornered) return;
+    const syncBounds = () => {
+      const { minX, maxX, minY, maxY } = getViewportBounds();
+      setDragBounds({ left: minX, right: maxX, top: minY, bottom: maxY });
+      clampToViewport();
+    };
+    syncBounds();
+    const onResize = () => syncBounds();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [clampToViewport, getViewportBounds, isReady, transition.cornered]);
 
   useEffect(() => {
     if (state !== 'connected') return;
     const client = getClient();
     const off = client.on('chat/delta', (env: Envelope) => {
-      const p = env.payload as { delta: string; done: boolean };
+      const payload = env.payload as { delta: string; done: boolean };
       const store = useChatStore.getState();
       const last = store.messages[store.messages.length - 1];
       if (last?.role === 'assistant' && last.streaming) {
-        updateLastAssistant(p.delta, p.done);
+        updateLastAssistant(payload.delta, payload.done);
       } else {
-        addMessage({ id: env.id, role: 'assistant', content: p.delta, ts: env.ts, streaming: !p.done });
+        addMessage({ id: env.id, role: 'assistant', content: payload.delta, ts: env.ts, streaming: !payload.done });
       }
     });
     return off;
-  }, [state]);
+  }, [addMessage, getClient, state, updateLastAssistant]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,79 +89,78 @@ export function Orb() {
     addMessage({ id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() });
     setInput('');
     getClient().sendFire('chat/send', { message: text, contextId: 'global' });
-  }, [input, state]);
+  }, [addMessage, getClient, input, state]);
 
   return (
     <>
-      <motion.div
-        drag
-        dragMomentum={false}
-        dragElastic={0.08}
-        whileHover={{ scale: 1.06 }}
-        whileTap={{ scale: 0.96 }}
-        className="fixed bottom-8 right-8 z-50 cursor-grab active:cursor-grabbing"
+      <div
+        className={`ai-sphere-stage active ${transition.cornered ? 'to-corner' : ''} ${isReady ? 'ai-sphere-stage--interactive' : ''}`}
+        style={{ opacity: visibleOpacity, transform: `scale(${stageScale})` }}
       >
-        <motion.button
-          onClick={() => setIsOpen((value) => !value)}
-          animate={{
-            scale: [1, 1.04, 1],
-            boxShadow: isOpen ? '0 25px 60px rgba(69,109,255,0.26)' : '0 18px 40px rgba(69,109,255,0.18)',
-          }}
-          transition={{ scale: { duration: 3, repeat: Infinity, ease: 'easeInOut' }, boxShadow: { duration: 0.25 } }}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-linear-to-br from-violet-400 via-blue-500 to-indigo-600 text-white shadow-lg"
-        >
-          <AnimatePresence mode="wait">
-            {isOpen ? (
-              <motion.span key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} className="text-2xl">
-                ×
-              </motion.span>
-            ) : (
-              <motion.span key="chat" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="text-xl">
-                ◌
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
-      </motion.div>
+        <div className="ai-sphere-shell">
+          <motion.button
+            type="button"
+            aria-label="Toggle assistant"
+            drag={isReady}
+            dragMomentum={false}
+            dragElastic={0.06}
+            dragConstraints={dragBounds}
+            dragListener={isReady}
+            dragPropagation={false}
+            style={{ x: dragX, y: dragY }}
+            onDragEnd={clampToViewport}
+            onClick={() => {
+              if (isReady) {
+                setIsOpen((value) => !value);
+              }
+            }}
+            whileHover={isReady ? { scale: 1.1, filter: 'brightness(1.1) saturate(1.12)' } : undefined}
+            whileTap={isReady ? { scale: 0.9, filter: 'brightness(1.06) saturate(1.06)' } : undefined}
+            whileDrag={isReady ? { scale: 0.9, filter: 'brightness(1.06) saturate(1.06)' } : undefined}
+            className={`ai-sphere ${isReady ? 'ai-sphere--button' : ''}`}
+          >
+            <div className="ring" />
+            <div className="core" />
+          </motion.button>
+        </div>
+      </div>
 
       <AnimatePresence>
-        {isOpen && (
-          <Surface
-            as={motion.div}
-            variant="panel"
-            initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        {isReady && isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -18, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 22, scale: 0.96 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            className="fixed bottom-28 right-8 z-40 flex w-[24rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[1.8rem]"
+            className="orb-panel"
           >
-            <div className="flex items-center gap-3 border-b border-white/50 px-5 py-4">
-              <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <div>
-                <p className="text-sm font-medium text-slate-800">IntentOS Assistant</p>
-                <p className="text-xs text-slate-400">{state === 'connected' ? 'Ready for a quick ask' : 'Waiting for connection'}</p>
+            <div className="orb-panel__header">
+              <div className="orb-panel__header-copy">
+                <p className="orb-panel__eyebrow">IntentOS Assistant</p>
+                <p className="orb-panel__status">{state === 'connected' ? 'Ready for a quick ask' : 'Waiting for connection'}</p>
               </div>
+              <button type="button" className="orb-panel__close" onClick={() => setIsOpen(false)} aria-label="Close assistant">
+                ×
+              </button>
             </div>
 
-            <div className="max-h-[21rem] min-h-[16rem] flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            <div className="orb-panel__messages">
               {messages.length === 0 && (
-                <p className="mt-10 text-center text-sm leading-6 text-slate-400">
+                <p className="orb-panel__empty">
                   Ask for a quick action, a draft, or a summary. IntentOS will route it into the current workspace.
                 </p>
               )}
 
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`max-w-[85%] rounded-[1.2rem] px-4 py-3 text-sm leading-6 shadow-sm ${
-                      msg.role === 'user'
-                        ? 'bg-linear-to-br from-blue-500 to-indigo-600 text-white'
-                        : 'bg-white/70 text-slate-700'
-                    }`}
-                  >
+                <div key={msg.id} className={`orb-panel__row ${msg.role === 'user' ? 'orb-panel__row--user' : ''}`}>
+                  <div className={`orb-panel__bubble ${msg.role === 'user' ? 'orb-panel__bubble--user' : 'orb-panel__bubble--assistant'}`}>
                     {msg.content}
                     {msg.streaming && (
-                      <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1, repeat: Infinity }} className="ml-1 inline-block">
+                      <motion.span
+                        animate={{ opacity: [0, 1, 0] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="orb-panel__caret"
+                      >
                         |
                       </motion.span>
                     )}
@@ -125,8 +170,8 @@ export function Orb() {
               <div ref={chatEndRef} />
             </div>
 
-            <div className="border-t border-white/50 px-4 py-4">
-              <Surface variant="pill" className="flex items-center gap-2 rounded-full px-3 py-2">
+            <div className="orb-panel__composer">
+              <div className="orb-panel__composer-shell">
                 <input
                   ref={inputRef}
                   type="text"
@@ -135,18 +180,19 @@ export function Orb() {
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="Type a message..."
                   disabled={isStreaming}
-                  className="min-w-0 flex-1 bg-transparent px-2 text-sm text-slate-700 outline-none placeholder:text-slate-400 disabled:opacity-50"
+                  className="orb-panel__input"
                 />
                 <button
+                  type="button"
                   onClick={handleSend}
                   disabled={!input.trim() || isStreaming}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="orb-panel__send"
                 >
                   ↗
                 </button>
-              </Surface>
+              </div>
             </div>
-          </Surface>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
