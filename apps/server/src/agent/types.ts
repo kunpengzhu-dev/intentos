@@ -21,6 +21,9 @@ export type AgentResult = {
     title: string;
     content?: string;
     url?: string;
+    localPath?: string;
+    fileName?: string;
+    fileSize?: number;
     mimeType?: string;
   }>;
   error?: { code: string; message: string };

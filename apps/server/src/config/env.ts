@@ -12,6 +12,8 @@ const envSchema = z.object({
   OPENCLAW_BASE_URL: z.string().default('http://localhost:8787'),
   OPENCLAW_API_KEY: z.string().optional(),
   OPENCLAW_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  ARTIFACT_STORAGE_DIR: z.string().default('./data/artifacts'),
+  ARTIFACT_PREVIEW_MAX_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
 });
 
 export const env = envSchema.parse(process.env);

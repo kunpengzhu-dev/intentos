@@ -7,6 +7,8 @@ import { broadcastToStream, sendEnvelope } from '../ws/server.js';
 import type { WsSession } from '../ws/server.js';
 import { logger } from '../config/logger.js';
 import type { AgentAdapter } from '../agent/index.js';
+import type { AgentResult } from '../agent/types.js';
+import { saveRunArtifacts } from '../artifact/service.js';
 
 export function createIntent(
   database: AppDatabase,
@@ -158,8 +160,8 @@ async function startRunWithAdapter(
             payload: { intentId, runId, progress, message },
           });
         },
-        onComplete: () => {
-          completeRun(database, session, intentId, runId, streamId);
+        onComplete: (result) => {
+          completeRun(database, session, intentId, runId, streamId, result);
         },
         onError: (error) => {
           failRun(database, session, intentId, runId, streamId, error.message);
@@ -178,6 +180,7 @@ function completeRun(
   intentId: string,
   runId: string,
   streamId: string,
+  result: AgentResult,
 ) {
   const now = Date.now();
 
@@ -194,18 +197,25 @@ function completeRun(
     .get(intentId) as { title: string } | undefined;
   const intentTitle = intentRow?.title ?? 'Unknown';
 
+  const artifactInputs = result.artifacts?.length
+    ? result.artifacts
+    : [{
+      kind: 'text',
+      title: 'Result',
+      content: 'Task completed successfully.',
+      mimeType: 'text/plain; charset=utf-8',
+    }];
+  const mappedArtifacts = saveRunArtifacts(
+    database,
+    session.scopeId,
+    intentId,
+    runId,
+    artifactInputs,
+  );
   const completedPayload = {
     intentId,
     runId,
-    artifacts: [{
-      id: nanoid(),
-      intentId,
-      runId,
-      kind: 'text',
-      title: 'Result',
-      content: 'Task completed successfully. This is a mock result.',
-      createdAt: now,
-    }],
+    artifacts: mappedArtifacts,
   };
 
   const completedSeq = appendEvent(database, session.scopeId, streamId, 'run/completed', completedPayload);
@@ -229,7 +239,7 @@ function completeRun(
     currentRunId: runId,
     updatedAt: now,
     needsAttention: false,
-    artifactCount: 1,
+    artifactCount: mappedArtifacts.length,
   };
 
   const globalSeq = appendEvent(database, session.scopeId, 'global', 'intent/status_changed', statusPayload);
@@ -248,7 +258,7 @@ function completeRun(
 
   database.sqlite
     .prepare('UPDATE intent_summary SET status = ?, updated_at = ?, artifact_count = ? WHERE intent_id = ?')
-    .run(IntentStatus.Completed, now, 1, intentId);
+    .run(IntentStatus.Completed, now, mappedArtifacts.length, intentId);
 
   logger.info(`Intent ${intentId} completed`);
 }

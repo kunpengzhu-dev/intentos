@@ -31,6 +31,24 @@ export const events = sqliteTable('events', {
   ts: integer('ts').notNull(),
 });
 
+export const artifacts = sqliteTable('artifacts', {
+  id: text('id').notNull().primaryKey(),
+  scopeId: text('scope_id').notNull(),
+  intentId: text('intent_id').notNull(),
+  runId: text('run_id').notNull(),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  content: text('content'),
+  url: text('url'),
+  previewUrl: text('preview_url'),
+  downloadUrl: text('download_url'),
+  fileName: text('file_name'),
+  fileSize: integer('file_size'),
+  mimeType: text('mime_type'),
+  localPath: text('local_path'),
+  createdAt: integer('created_at').notNull(),
+});
+
 export const streamHead = sqliteTable('stream_head', {
   scopeId: text('scope_id').notNull(),
   streamId: text('stream_id').notNull(),

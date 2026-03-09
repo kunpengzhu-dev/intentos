@@ -45,6 +45,24 @@ export function createDatabase(): AppDatabase {
       payload TEXT NOT NULL,
       ts INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id TEXT NOT NULL PRIMARY KEY,
+      scope_id TEXT NOT NULL,
+      intent_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT,
+      url TEXT,
+      preview_url TEXT,
+      download_url TEXT,
+      file_name TEXT,
+      file_size INTEGER,
+      mime_type TEXT,
+      local_path TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(scope_id, run_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_events_stream ON events(scope_id, stream_id, server_seq);
     CREATE TABLE IF NOT EXISTS stream_head (
       scope_id TEXT NOT NULL,

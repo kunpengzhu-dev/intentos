@@ -6,6 +6,10 @@ export type ArtifactDTO = {
   title: string;
   content?: string;
   url?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  fileName?: string;
+  fileSize?: number;
   mimeType?: string;
   createdAt: number;
 };

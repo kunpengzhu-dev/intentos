@@ -8,6 +8,7 @@ import { registerWebSocket } from './ws/server.js';
 import { registerHealthRoutes } from './http/health.js';
 import { registerBootRoutes } from './http/boot.js';
 import { registerDebugRoutes } from './http/debug.js';
+import { registerArtifactRoutes } from './http/artifacts.js';
 import { createMessageHandler } from './ws/handlers/index.js';
 import type { AppContext } from './context.js';
 import { BootService } from './boot/service.js';
@@ -31,6 +32,7 @@ async function main() {
 
   registerHealthRoutes(app);
   registerBootRoutes(app, bootService);
+  registerArtifactRoutes(app, database);
   registerDebugRoutes(app, database);
   registerWebSocket(app, ctx);
 

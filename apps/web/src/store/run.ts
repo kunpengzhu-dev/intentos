@@ -16,6 +16,11 @@ export type RunArtifact = {
   title: string;
   content?: string;
   url?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
 };
 
 type RunStore = {

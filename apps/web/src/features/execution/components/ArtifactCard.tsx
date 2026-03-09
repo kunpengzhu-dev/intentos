@@ -3,6 +3,9 @@ import { motion } from 'framer-motion';
 import type { RunArtifact } from '../../../store/run';
 
 export function ArtifactCard({ artifact }: { artifact: RunArtifact }) {
+  const downloadUrl = artifact.downloadUrl ?? artifact.url;
+  const previewUrl = artifact.previewUrl ?? (artifact.url?.includes('/download') ? artifact.url.replace('/download', '/preview') : undefined);
+
   return (
     <Surface as={motion.div} variant="panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[1.6rem] p-5">
       <div className="mb-3 flex items-center gap-3">
@@ -14,11 +17,24 @@ export function ArtifactCard({ artifact }: { artifact: RunArtifact }) {
       </div>
 
       {artifact.content && <p className="text-sm leading-6 whitespace-pre-wrap text-slate-600">{artifact.content}</p>}
-      {artifact.url && (
-        <a href={artifact.url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex text-sm font-medium text-blue-700 hover:underline">
-          {artifact.url}
-        </a>
+      {artifact.fileName && (
+        <p className="mt-1 text-xs text-slate-500">
+          {artifact.fileName}
+          {typeof artifact.fileSize === 'number' ? ` · ${Math.ceil(artifact.fileSize / 1024)} KB` : ''}
+        </p>
       )}
+      <div className="mt-4 flex flex-wrap gap-4">
+        {previewUrl && (
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="inline-flex text-sm font-medium text-blue-700 hover:underline">
+            Preview
+          </a>
+        )}
+        {downloadUrl && (
+          <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex text-sm font-medium text-blue-700 hover:underline">
+            Download
+          </a>
+        )}
+      </div>
     </Surface>
   );
 }
