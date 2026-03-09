@@ -11,19 +11,13 @@ import { useConnectionStore } from '../../../store/connection';
 
 export function useBootConnection() {
   const { phase, checks, progress, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
-  const { init, getClient, state } = useConnectionStore();
+  const { getClient, state } = useConnectionStore();
   const bootSent = useRef(false);
 
   const failureText = useMemo(() => {
     const failedCheck = checks.find((check) => check.state === 'failed');
     return failedCheck?.error ?? 'Startup checks failed. Please inspect the failed subsystem and retry.';
   }, [checks]);
-
-  useEffect(() => {
-    init();
-    const client = getClient();
-    client.connect();
-  }, [getClient, init]);
 
   useEffect(() => {
     if (state !== 'connected' || bootSent.current) return;

@@ -9,3 +9,9 @@ export const initialOrbTransitionState: OrbTransitionState = {
   opacity: 0,
   cornered: false,
 };
+
+export const readyOrbTransitionState: OrbTransitionState = {
+  mode: 'ready',
+  opacity: 1,
+  cornered: true,
+};

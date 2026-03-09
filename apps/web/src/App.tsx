@@ -2,21 +2,34 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppBackdrop } from '@intentos/ui/react';
 import mercuryBackground from './assets/backgrounds/mercury-background.jpg';
 import { BootPage } from './features/boot/BootPage';
+import { markBootSeen, shouldShowBoot } from './features/boot/bootGate';
 import { ExecutionPage } from './features/execution/ExecutionPage';
 import { HomePage } from './features/home/HomePage';
 import { Orb } from './features/orb/Orb';
 import { initialOrbTransitionState } from './features/orb/types';
+import { readyOrbTransitionState } from './features/orb/types';
 import type { OrbTransitionState } from './features/orb/types';
+import { useConnectionStore } from './store/connection';
 
 type Route =
   | { page: 'home' }
   | { page: 'execution'; intentId: string; runId: string };
 
 export function App() {
-  const [booted, setBooted] = useState(false);
+  const { init, getClient } = useConnectionStore();
+  const initialShouldShowBoot = useRef(shouldShowBoot(window.location.search)).current;
+  const [booted, setBooted] = useState(() => !initialShouldShowBoot);
   const [route, setRoute] = useState<Route>({ page: 'home' });
-  const [orbTransition, setOrbTransition] = useState<OrbTransitionState>(initialOrbTransitionState);
+  const [orbTransition, setOrbTransition] = useState<OrbTransitionState>(() => (
+    initialShouldShowBoot ? initialOrbTransitionState : readyOrbTransitionState
+  ));
   const readyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    init();
+    const client = getClient();
+    client.connect();
+  }, [getClient, init]);
 
   useEffect(() => {
     return () => {
@@ -27,6 +40,7 @@ export function App() {
   }, []);
 
   const handleBootReady = useCallback(() => {
+    markBootSeen();
     setBooted(true);
     if (readyTimerRef.current !== null) {
       window.clearTimeout(readyTimerRef.current);
@@ -36,6 +50,7 @@ export function App() {
       readyTimerRef.current = null;
     }, 520);
   }, []);
+
   const handleOrbTransitionChange = useCallback((next: Partial<OrbTransitionState>) => {
     setOrbTransition((current) => {
       const merged = { ...current, ...next };
