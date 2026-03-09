@@ -33,7 +33,7 @@ export function sendEnvelope(ws: WebSocket, envelope: Envelope) {
 }
 
 export function registerWebSocket(app: FastifyInstance, ctx: AppContext) {
-  app.get('/ws', { websocket: true }, (socket, _req) => {
+  app.get('/ws', { websocket: true }, (socket) => {
     const sessionId = nanoid();
     logger.info(`WS connected: ${sessionId}`);
 

@@ -5,25 +5,17 @@ import { BootPage } from './features/boot/BootPage';
 import { ExecutionPage } from './features/execution/ExecutionPage';
 import { HomePage } from './features/home/HomePage';
 import { Orb } from './features/orb/Orb';
+import { initialOrbTransitionState } from './features/orb/types';
+import type { OrbTransitionState } from './features/orb/types';
 
 type Route =
   | { page: 'home' }
   | { page: 'execution'; intentId: string; runId: string };
 
-export type OrbTransitionState = {
-  mode: 'boot' | 'ready';
-  opacity: number;
-  cornered: boolean;
-};
-
 export function App() {
   const [booted, setBooted] = useState(false);
   const [route, setRoute] = useState<Route>({ page: 'home' });
-  const [orbTransition, setOrbTransition] = useState<OrbTransitionState>({
-    mode: 'boot',
-    opacity: 0,
-    cornered: false,
-  });
+  const [orbTransition, setOrbTransition] = useState<OrbTransitionState>(initialOrbTransitionState);
   const readyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {

@@ -46,7 +46,7 @@ export function createMessageHandler(ctx: AppContext) {
           return;
         }
 
-        const { intentId, runId } = createIntent(ctx.database, session, message, 'user');
+        const { intentId, runId } = createIntent(ctx.database, session, message, ctx.agentAdapter, 'user');
         const ackPayload = { accepted: true, intentId, runId };
 
         if (envelope.reqId && envelope.clientId) {
