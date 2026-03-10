@@ -25,6 +25,7 @@ out/
 *.db-journal
 *.db-wal
 *.db-shm
+apps/server/data/openclaw-device.json
 
 # IDE
 .vscode/

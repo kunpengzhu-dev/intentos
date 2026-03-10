@@ -18,7 +18,11 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@intentos/protocol": "workspace:*"
+    "@intentos/protocol": "workspace:*",
+    "ws": "^8.19.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/ws": "^8.18.1"
+  }
 }

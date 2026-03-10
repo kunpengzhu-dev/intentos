@@ -38,6 +38,9 @@ export const EVENT_META: Record<string, EventMetaEntry> = {
 
   'chat/send': { replayable: false, stream: null, since: 1 },
   'chat/delta': { replayable: false, stream: null, since: 1 },
+  'chat/history': { replayable: false, stream: null, since: 1 },
+  'chat/history_ok': { replayable: false, stream: null, since: 1 },
+  'chat/history_sync': { replayable: false, stream: null, since: 1 },
 
   'suggestion/list': { replayable: false, stream: null, since: 1 },
   'suggestion/list_ok': { replayable: false, stream: null, since: 1 },

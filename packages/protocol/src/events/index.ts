@@ -8,7 +8,15 @@ export type {
   BootCompletedPayload,
   BootFailedPayload,
 } from './boot.js';
-export type { ChatSendPayload, ChatDeltaPayload } from './chat.js';
+export type {
+  ChatSendPayload,
+  ChatDeltaPayload,
+  ChatHistoryPayload,
+  ChatHistoryPart,
+  ChatHistoryEntry,
+  ChatHistoryOkPayload,
+  ChatHistorySyncPayload,
+} from './chat.js';
 export type {
   IntentCreatePayload,
   IntentCreateAckPayload,

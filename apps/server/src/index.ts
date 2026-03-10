@@ -14,6 +14,7 @@ import type { AppContext } from './context.js';
 import { BootService } from './boot/service.js';
 import { createScriptBootProvider } from './boot/script-provider.js';
 import { createAgentAdapter } from './agent/index.js';
+import { ChatService } from './chat/service.js';
 
 async function main() {
   const app = Fastify({ logger: false });
@@ -25,10 +26,11 @@ async function main() {
   logger.info(`Database initialized at ${env.DATABASE_URL}`);
   const agentAdapter = createAgentAdapter();
   logger.info(`Agent adapter initialized: ${agentAdapter.provider}`);
+  const chatService = new ChatService(env);
 
   const bootService = new BootService(createScriptBootProvider());
-  const handler = createMessageHandler({ database, bootService, agentAdapter } as AppContext);
-  const ctx: AppContext = { database, bootService, agentAdapter, handleMessage: handler };
+  const handler = createMessageHandler({ database, bootService, agentAdapter, chatService } as AppContext);
+  const ctx: AppContext = { database, bootService, agentAdapter, chatService, handleMessage: handler };
 
   registerHealthRoutes(app);
   registerBootRoutes(app, bootService);

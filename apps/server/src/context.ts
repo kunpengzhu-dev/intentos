@@ -3,10 +3,12 @@ import type { WsSession } from './ws/server.js';
 import type { AppDatabase } from './db/index.js';
 import type { BootService } from './boot/service.js';
 import type { AgentAdapter } from './agent/index.js';
+import type { ChatService } from './chat/service.js';
 
 export type AppContext = {
   database: AppDatabase;
   bootService: BootService;
   agentAdapter: AgentAdapter;
+  chatService: ChatService;
   handleMessage: (session: WsSession, envelope: Envelope) => void;
 };

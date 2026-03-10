@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, type MotionValue } from 'framer-motion';
 import type { RefObject } from 'react';
 import type { ChatBubble } from '../../../store/chat';
 
@@ -11,6 +11,10 @@ export function OrbPanel({
   onInputEnter,
   onSend,
   onClose,
+  onMessagesScroll,
+  placement,
+  panelMotionStyle,
+  panelRef,
   inputRef,
   chatEndRef,
 }: {
@@ -22,16 +26,24 @@ export function OrbPanel({
   onInputEnter: () => void;
   onSend: () => void;
   onClose: () => void;
+  onMessagesScroll?: (scrollTop: number) => void;
+  placement: 'top' | 'bottom';
+  panelMotionStyle: { x: MotionValue<number>; y: MotionValue<number> };
+  panelRef: RefObject<HTMLDivElement | null>;
   inputRef: RefObject<HTMLInputElement | null>;
   chatEndRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -18, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -12, scale: 0.96 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
+      ref={panelRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.16, ease: 'linear' }}
       className="orb-panel"
+      data-placement={placement}
+      style={panelMotionStyle}
+      onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="orb-panel__header">
         <div className="orb-panel__header-copy">
@@ -43,7 +55,10 @@ export function OrbPanel({
         </button>
       </div>
 
-      <div className="orb-panel__messages">
+      <div
+        className="orb-panel__messages"
+        onScroll={(event) => onMessagesScroll?.(event.currentTarget.scrollTop)}
+      >
         {messages.length === 0 && (
           <p className="orb-panel__empty">
             Ask for a quick action, a draft, or a summary. IntentOS will route it into the current workspace.

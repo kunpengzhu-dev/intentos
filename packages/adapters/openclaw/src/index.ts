@@ -1,5 +1,6 @@
 export { OpenClawClient } from './client.js';
 export { checkPolicy, isHighRiskAction } from './policy-gate.js';
+export { streamOpenClawGatewayChat, fetchOpenClawGatewayHistory } from './gateway-chat.js';
 export type {
   OpenClawConfig,
   AgentRequest,

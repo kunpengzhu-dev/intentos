@@ -11,6 +11,7 @@ export type WsSession = {
   clientId: string;
   scopeId: string;
   sessionId: string;
+  clientOrigin?: string;
   subscribedStreams: Set<string>;
 };
 
@@ -33,7 +34,7 @@ export function sendEnvelope(ws: WebSocket, envelope: Envelope) {
 }
 
 export function registerWebSocket(app: FastifyInstance, ctx: AppContext) {
-  app.get('/ws', { websocket: true }, (socket) => {
+  app.get('/ws', { websocket: true }, (socket, request) => {
     const sessionId = nanoid();
     logger.info(`WS connected: ${sessionId}`);
 
@@ -64,6 +65,7 @@ export function registerWebSocket(app: FastifyInstance, ctx: AppContext) {
             clientId,
             scopeId,
             sessionId,
+            clientOrigin: request.headers.origin,
             subscribedStreams: new Set(),
           };
           sessions.set(sessionId, session);
