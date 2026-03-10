@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const configDir = dirname(fileURLToPath(import.meta.url));
 const serverDir = resolve(configDir, '../..');
-const serverEnvFile = resolve(serverDir, '.env');
+const repoRootDir = resolve(serverDir, '../..');
+const rootEnvFile = resolve(repoRootDir, '.env');
 
-if (existsSync(serverEnvFile)) {
-  process.loadEnvFile(serverEnvFile);
+if (existsSync(rootEnvFile)) {
+  process.loadEnvFile(rootEnvFile);
 }

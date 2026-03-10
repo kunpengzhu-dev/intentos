@@ -29,14 +29,56 @@ apps/
 - **Node.js** >= 20
 - **pnpm** >= 9
 
-### Setup
+### Recommended: Desktop app
+
+Use the Desktop flow below for the default local setup.
+
+### Desktop (Electron)
 
 ```bash
 # Install dependencies
 pnpm install
 
-# Build all packages
-pnpm build
+# Create root env file
+cp .env.example .env
+
+# (PowerShell)
+# Copy-Item .env.example .env
+```
+
+You can get `OPENCLAW_GATEWAY_TOKEN` for your root `.env` from:
+
+```bash
+openclaw dashboard --no-open
+```
+
+From output like `Dashboard URL: http://127.0.0.1:18789/#token=...`, copy the value after `token=` into `.env`:
+
+Then start desktop app (will run server + web + electron together):
+
+```bash
+pnpm dev:desktop
+```
+
+### OpenClaw first-time pairing
+
+After the first `pnpm dev:desktop`, approve the new desktop device in OpenClaw:
+
+```bash
+openclaw devices list
+openclaw devices approve <pending-request-id>
+```
+
+Use `openclaw devices list` to find the pending device request id (a UUID shown in the `Pending pair` device row), then run `openclaw devices approve <pending-request-id>`.
+
+### Optional: Run server + web separately
+
+```bash
+# Install dependencies
+pnpm install
+
+# Create root env file
+cp .env.example .env
 
 # Start the server (port 3001)
 cd apps/server && pnpm dev
@@ -47,29 +89,20 @@ cd apps/web && pnpm dev
 
 Open http://localhost:5173 to see IntentOS.
 
-### Desktop (Electron)
+### Desktop production run and Harmony packaging
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Development mode (server + web + electron)
-pnpm dev:desktop
-
-# Production-like desktop run (web + server are built, server is embedded by Electron main process)
+# Production-like desktop run (builds web + server, then starts Electron with embedded server)
 pnpm desktop
+
+# Prepare HarmonyOS resources (output defaults to apps/desktop/dist/harmony/app)
+pnpm prepare:harmony
 ```
 
 If you want to point Electron at a different backend:
 
 ```bash
 INTENTOS_SERVER_URL=http://localhost:3001 pnpm dev:desktop
-```
-
-Prepare HarmonyOS resources (output defaults to `apps/desktop/dist/harmony/app`):
-
-```bash
-pnpm --filter @intentos/desktop prepare:harmony
 ```
 
 ### What you'll see
