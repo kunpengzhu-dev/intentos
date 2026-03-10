@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { AIOSClient, type ConnectionState } from '@intentos/sdk';
+import { getWebSocketUrl } from '../lib/runtimeConfig';
 
 type ConnectionStore = {
   client: AIOSClient | null;
@@ -13,7 +14,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   state: 'disconnected',
   init: () => {
     if (get().client) return;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+    const wsUrl = getWebSocketUrl();
     const client = new AIOSClient({
       url: wsUrl,
       onStateChange: (state) => set({ state }),

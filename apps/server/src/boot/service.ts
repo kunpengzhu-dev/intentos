@@ -56,7 +56,7 @@ export class BootService {
       await this.provider.run({
         sessionId: session.id,
         callbackToken,
-        callbackBaseUrl: env.BOOT_CALLBACK_BASE_URL ?? `http://127.0.0.1:${env.PORT}`,
+        callbackBaseUrl: env.BOOT_CALLBACK_BASE_URL ?? `http://localhost:${env.PORT}`,
       });
     } catch (error) {
       this.emitFailed(session, {

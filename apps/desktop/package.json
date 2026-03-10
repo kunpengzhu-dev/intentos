@@ -1,0 +1,23 @@
+{
+  "name": "@intentos/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "concurrently -k \"pnpm --filter @intentos/server dev\" \"pnpm --filter @intentos/web dev\" \"pnpm dev:electron\"",
+    "dev:electron": "wait-on tcp:3001 tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .",
+    "start": "pnpm build && electron .",
+    "build": "pnpm --filter @intentos/web build",
+    "lint": "echo \"desktop lint not configured yet\"",
+    "typecheck": "echo \"desktop typecheck not configured yet\"",
+    "test": "echo \"no tests yet\"",
+    "clean": "rm -rf .turbo"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.0",
+    "wait-on": "^8.0.5"
+  }
+}

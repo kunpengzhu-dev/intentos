@@ -32,7 +32,7 @@ Content-Type: application/json
 例如：
 
 ```text
-http://127.0.0.1:3001
+http://localhost:3001
 ```
 
 实际请求地址为：

@@ -1,10 +1,14 @@
 import { Surface } from '@intentos/ui/react';
 import { motion } from 'framer-motion';
 import type { RunArtifact } from '../../../store/run';
+import { resolveBackendUrl } from '../../../lib/runtimeConfig';
 
 export function ArtifactCard({ artifact }: { artifact: RunArtifact }) {
-  const downloadUrl = artifact.downloadUrl ?? artifact.url;
-  const previewUrl = artifact.previewUrl ?? (artifact.url?.includes('/download') ? artifact.url.replace('/download', '/preview') : undefined);
+  const downloadUrl = resolveBackendUrl(artifact.downloadUrl ?? artifact.url);
+  const previewUrl = resolveBackendUrl(
+    artifact.previewUrl
+      ?? (artifact.url?.includes('/download') ? artifact.url.replace('/download', '/preview') : undefined),
+  );
 
   return (
     <Surface as={motion.div} variant="panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-[1.6rem] p-5">

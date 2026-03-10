@@ -12,7 +12,7 @@ function readArg(name, fallback) {
 
 const delayMs = Number(readArg('--delay', '500'));
 const mode = readArg('--mode', 'success');
-const callbackUrl = process.env.BOOT_CALLBACK_URL ?? 'http://127.0.0.1:3001';
+const callbackUrl = process.env.BOOT_CALLBACK_URL ?? 'http://localhost:3001';
 const bootToken = process.env.BOOT_TOKEN ?? '';
 
 if (!bootToken) {

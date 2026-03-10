@@ -4,12 +4,15 @@
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
+    "dev:desktop": "pnpm --filter @intentos/desktop dev",
     "build": "turbo build",
+    "build:desktop": "pnpm --filter @intentos/desktop build",
     "lint": "turbo lint",
     "format": "prettier --write .",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "desktop": "pnpm --filter @intentos/desktop start"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
