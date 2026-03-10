@@ -53,14 +53,23 @@ Open http://localhost:5173 to see IntentOS.
 # Install dependencies
 pnpm install
 
-# Start desktop app (will run server + web + electron together)
+# Development mode (server + web + electron)
 pnpm dev:desktop
+
+# Production-like desktop run (web + server are built, server is embedded by Electron main process)
+pnpm desktop
 ```
 
 If you want to point Electron at a different backend:
 
 ```bash
 INTENTOS_SERVER_URL=http://localhost:3001 pnpm dev:desktop
+```
+
+Prepare HarmonyOS resources (output defaults to `apps/desktop/dist/harmony/app`):
+
+```bash
+pnpm --filter @intentos/desktop prepare:harmony
 ```
 
 ### What you'll see

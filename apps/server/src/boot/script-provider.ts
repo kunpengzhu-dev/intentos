@@ -1,26 +1,52 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { BootProvider } from './types.js';
 import { env } from '../config/env.js';
+
+const serverRootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 function getBootProviderArgs(): string[] {
   const parsed = JSON.parse(env.BOOT_PROVIDER_ARGS_JSON) as unknown;
   if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
     throw new Error('BOOT_PROVIDER_ARGS_JSON must be a JSON string array');
   }
-  return parsed;
+
+  if (parsed.length === 0) {
+    return parsed;
+  }
+
+  const [firstArg, ...restArgs] = parsed;
+  if (!firstArg || isAbsolute(firstArg)) {
+    return parsed;
+  }
+
+  const absoluteFirstArg = resolve(serverRootDir, firstArg);
+  if (!existsSync(absoluteFirstArg)) {
+    return parsed;
+  }
+
+  return [absoluteFirstArg, ...restArgs];
 }
 
 export function createScriptBootProvider(): BootProvider {
   return {
     run({ sessionId, callbackToken, callbackBaseUrl }) {
       return new Promise<void>((resolvePromise, rejectPromise) => {
+        const childEnv: Record<string, string | undefined> = {
+          ...process.env,
+          BOOT_SESSION_ID: sessionId,
+          BOOT_CALLBACK_URL: env.BOOT_CALLBACK_BASE_URL ?? callbackBaseUrl,
+          BOOT_TOKEN: callbackToken,
+        };
+        if (process.versions.electron && !childEnv.ELECTRON_RUN_AS_NODE) {
+          childEnv.ELECTRON_RUN_AS_NODE = '1';
+        }
+
         const child = spawn(env.BOOT_PROVIDER_COMMAND, getBootProviderArgs(), {
-          env: {
-            ...process.env,
-            BOOT_SESSION_ID: sessionId,
-            BOOT_CALLBACK_URL: env.BOOT_CALLBACK_BASE_URL ?? callbackBaseUrl,
-            BOOT_TOKEN: callbackToken,
-          },
+          cwd: serverRootDir,
+          env: childEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 

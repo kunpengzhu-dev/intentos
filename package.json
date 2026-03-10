@@ -7,6 +7,7 @@
     "dev:desktop": "pnpm --filter @intentos/desktop dev",
     "build": "turbo build",
     "build:desktop": "pnpm --filter @intentos/desktop build",
+    "prepare:harmony": "pnpm --filter @intentos/desktop prepare:harmony",
     "lint": "turbo lint",
     "format": "prettier --write .",
     "typecheck": "turbo typecheck",
