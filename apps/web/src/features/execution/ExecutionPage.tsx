@@ -4,12 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { Envelope } from '@intentos/protocol';
 import { useConnectionStore } from '../../store/connection';
 import { useRunStore, type RunArtifact, type RunStep } from '../../store/run';
+import { useIntentStore } from '../../store/intents';
 import { ArtifactCard } from './components/ArtifactCard';
 import { ExecutionStepItem } from './components/ExecutionStepItem';
 
 export function ExecutionPage({ intentId, runId, onBack }: { intentId: string; runId: string; onBack: () => void }) {
   const { getClient, state } = useConnectionStore();
   const { steps, artifacts, progress, progressMessage, runStatus, setActiveRun, upsertStep, setArtifacts, setProgress, setRunStatus, reset } = useRunStore();
+  const intentCard = useIntentStore((s) => s.intents.get(intentId));
 
   useEffect(() => {
     setActiveRun(intentId, runId);
@@ -60,9 +62,12 @@ export function ExecutionPage({ intentId, runId, onBack }: { intentId: string; r
     };
   }, [intentId, runId, state]);
 
+  const effectiveRunStatus = intentCard?.subagentSessionKey
+    ? (intentCard.status === 'completed' ? 'completed' : intentCard.status === 'failed' ? 'failed' : 'running')
+    : runStatus;
   const statusTone =
-    runStatus === 'completed' ? 'text-emerald-700' : runStatus === 'failed' ? 'text-rose-700' : 'text-blue-700';
-  const statusLabel = runStatus === 'completed' ? 'Completed' : runStatus === 'failed' ? 'Failed' : 'Running';
+    effectiveRunStatus === 'completed' ? 'text-emerald-700' : effectiveRunStatus === 'failed' ? 'text-rose-700' : 'text-blue-700';
+  const statusLabel = effectiveRunStatus === 'completed' ? 'Completed' : effectiveRunStatus === 'failed' ? 'Failed' : 'Running';
 
   return (
     <div className="absolute inset-0 z-10 overflow-y-auto">
@@ -83,7 +88,7 @@ export function ExecutionPage({ intentId, runId, onBack }: { intentId: string; r
                 Intent {intentId.slice(0, 8)}... / Run {runId.slice(0, 8)}...
               </p>
 
-              {runStatus === 'running' && (
+              {effectiveRunStatus === 'running' && (
                 <div className="mt-8">
                   <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
                     <span>{progressMessage || 'Processing active stream...'}</span>
@@ -129,6 +134,15 @@ export function ExecutionPage({ intentId, runId, onBack }: { intentId: string; r
                 <div className="flex justify-between"><span>Artifacts</span><span>{artifacts.length}</span></div>
               </div>
             </Surface>
+
+            {intentCard?.runtimeContextText && (
+              <Surface variant="soft" className="rounded-[1.75rem] p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Task Result Context</p>
+                <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
+                  {intentCard.runtimeContextText}
+                </pre>
+              </Surface>
+            )}
 
             <AnimatePresence>
               {artifacts.length > 0 && (

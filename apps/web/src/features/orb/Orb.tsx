@@ -1,51 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, useMotionValue } from 'framer-motion';
-import type { ChatHistoryEntry, ChatHistoryPart, ChatHistoryOkPayload, ChatHistorySyncPayload } from '@intentos/protocol';
+import type { ChatHistoryEntry, ChatHistoryOkPayload, ChatHistorySyncPayload } from '@intentos/protocol';
 import { useChatStore } from '../../store/chat';
 import { useConnectionStore } from '../../store/connection';
 import type { OrbTransitionState } from './types';
 import { OrbPanel, OrbSphere } from './components';
 import { useOrbDrag } from './useOrbDrag';
+import { historyEntryToDisplayText, useSubagentIntentSync } from './useSubagentIntentSync';
 
 const HISTORY_PAGE_SIZE = 20;
 const HISTORY_SYNC_INTERVAL_MS = 5000;
-const INTERNAL_RUNTIME_CONTEXT_PREFIX = 'OpenClaw runtime context (internal):';
-
-function historyPartsToText(parts: ChatHistoryPart[]): string {
-  const lines: string[] = [];
-  for (const part of parts) {
-    if (part.type === 'text') {
-      if (part.text) lines.push(part.text);
-      continue;
-    }
-    // For chat.history backfill, keep non-text parts as raw passthrough JSON.
-    lines.push(JSON.stringify(part));
-  }
-  return lines.join('\n').trim();
-}
 
 function historyEntryToBubble(entry: ChatHistoryEntry, fallbackId: string) {
-  const content = historyPartsToText(entry.parts);
   return {
     id: entry.id || `history:${fallbackId}`,
     role: entry.role === 'user' ? 'user' : 'assistant',
-    content,
+    content: historyEntryToDisplayText(entry),
     ts: entry.timestamp || Date.now(),
     streaming: false,
-  };
-}
-
-function historyEntryPlainText(entry: ChatHistoryEntry): string {
-  return entry.parts
-    .filter((part) => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n')
-    .trim();
-}
-
-function isInternalRuntimeContextEntry(entry: ChatHistoryEntry): boolean {
-  if (entry.role !== 'user') return false;
-  return historyEntryPlainText(entry).startsWith(INTERNAL_RUNTIME_CONTEXT_PREFIX);
+  } as const;
 }
 
 export function Orb({ transition }: { transition: OrbTransitionState }) {
@@ -54,6 +27,13 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
   const [panelPlacement, setPanelPlacement] = useState<'top' | 'bottom'>('bottom');
   const { getClient, state } = useConnectionStore();
   const { messages, addMessage, upsertMessages, applyAssistantDelta, isStreaming } = useChatStore();
+  const {
+    filterDisplayEntries,
+    syncSubagentIntentsFromEntries,
+    collectCompletionEntries,
+    resetSubagentSyncState,
+  } = useSubagentIntentSync();
+
   const orbButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelRafRef = useRef<number | null>(null);
@@ -68,9 +48,8 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
   const historyHasMoreRef = useRef(true);
   const historyInitializedRef = useRef(false);
   const historyPollingRef = useRef(false);
-  const forwardedCompletionIdsRef = useRef<Set<string>>(new Set());
-  const lastRuntimeContextTsRef = useRef(0);
   const skipNextAutoScrollRef = useRef(false);
+
   const isReady = transition.mode === 'ready';
   const visibleOpacity = transition.cornered ? 1 : transition.opacity;
   const stageScale = transition.cornered ? 1 : 0.92 + transition.opacity * 0.08;
@@ -115,7 +94,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     }
     panelX.set(Math.round(left));
     panelY.set(Math.round(top));
-  }, [isOpen]);
+  }, [isOpen, panelX, panelY]);
 
   const schedulePanelPositionUpdate = useCallback(() => {
     if (!isOpen) return;
@@ -139,25 +118,24 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
       const payload = env.payload as ChatHistoryOkPayload;
       if (!payload?.accepted) return;
       const entries: ChatHistoryEntry[] = Array.isArray(payload.entries) ? payload.entries : [];
-      const bubbles = entries
-        .filter((entry) => !isInternalRuntimeContextEntry(entry))
-        .map((entry, index) => historyEntryToBubble(entry, `${limit}-${index}`));
+      syncSubagentIntentsFromEntries(entries);
+      const bubbles = filterDisplayEntries(entries).map((entry, index) =>
+        historyEntryToBubble(entry, `${limit}-${index}`),
+      );
       skipNextAutoScrollRef.current = reason === 'pagination';
       upsertMessages(bubbles);
 
-      if (reason !== 'sync') {
-        const previousCount = historyLoadedCountRef.current;
-        historyLoadedCountRef.current = entries.length;
-        historyLimitRef.current = limit;
-        historyHasMoreRef.current = entries.length > previousCount;
-        historyInitializedRef.current = true;
-      }
+      const previousCount = historyLoadedCountRef.current;
+      historyLoadedCountRef.current = entries.length;
+      historyLimitRef.current = limit;
+      historyHasMoreRef.current = entries.length > previousCount;
+      historyInitializedRef.current = true;
     } catch {
       // ignore history load errors in UI path
     } finally {
       historyLoadingRef.current = false;
     }
-  }, [getClient, state, upsertMessages]);
+  }, [filterDisplayEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
     if (state !== 'connected') return;
@@ -169,16 +147,17 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     const offHistory = client.on('chat/history_sync', (env) => {
       const payload = env.payload as ChatHistorySyncPayload;
       const entries: ChatHistoryEntry[] = Array.isArray(payload.entries) ? payload.entries : [];
-      const bubbles = entries
-        .filter((entry) => !isInternalRuntimeContextEntry(entry))
-        .map((entry, index) => historyEntryToBubble(entry, `${env.id}-${index}`));
+      syncSubagentIntentsFromEntries(entries);
+      const bubbles = filterDisplayEntries(entries).map((entry, index) =>
+        historyEntryToBubble(entry, `${env.id}-${index}`),
+      );
       upsertMessages(bubbles);
     });
     return () => {
       offDelta();
       offHistory();
     };
-  }, [applyAssistantDelta, getClient, state, upsertMessages]);
+  }, [applyAssistantDelta, filterDisplayEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
     if (state !== 'connected') {
@@ -187,13 +166,12 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
       historyLoadedCountRef.current = 0;
       historyLimitRef.current = HISTORY_PAGE_SIZE;
       historyPollingRef.current = false;
-      forwardedCompletionIdsRef.current.clear();
-      lastRuntimeContextTsRef.current = 0;
+      resetSubagentSyncState();
       return;
     }
     if (historyInitializedRef.current) return;
     void loadHistory(HISTORY_PAGE_SIZE, 'initial');
-  }, [loadHistory, state]);
+  }, [loadHistory, resetSubagentSyncState, state]);
 
   const pollSubagentCompletion = useCallback(async () => {
     if (state !== 'connected') return;
@@ -205,40 +183,12 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
       const payload = env.payload as ChatHistoryOkPayload;
       if (!payload?.accepted) return;
       const entries: ChatHistoryEntry[] = Array.isArray(payload.entries) ? payload.entries : [];
-      const completionBubbles: ReturnType<typeof historyEntryToBubble>[] = [];
-      let watermarkToCommit = lastRuntimeContextTsRef.current;
-
-      for (let i = 0; i < entries.length; i += 1) {
-        const current = entries[i];
-        if (current.timestamp <= lastRuntimeContextTsRef.current) continue;
-        if (!isInternalRuntimeContextEntry(current)) continue;
-
-        let candidateAssistant: ChatHistoryEntry | null = null;
-        for (let j = i + 1; j < entries.length; j += 1) {
-          const next = entries[j];
-          if (next.role !== 'assistant') continue;
-          candidateAssistant = next;
-          break;
-        }
-        if (!candidateAssistant) {
-          continue;
-        }
-        if (forwardedCompletionIdsRef.current.has(candidateAssistant.id)) {
-          watermarkToCommit = Math.max(watermarkToCommit, current.timestamp);
-          continue;
-        }
-        forwardedCompletionIdsRef.current.add(candidateAssistant.id);
-        completionBubbles.push(historyEntryToBubble(candidateAssistant, `completion-${candidateAssistant.timestamp}`));
-        watermarkToCommit = Math.max(watermarkToCommit, current.timestamp);
-      }
-
-      if (forwardedCompletionIdsRef.current.size > 200) {
-        const first = forwardedCompletionIdsRef.current.values().next().value;
-        if (first) forwardedCompletionIdsRef.current.delete(first);
-      }
-
-      lastRuntimeContextTsRef.current = watermarkToCommit;
-      if (completionBubbles.length > 0) {
+      syncSubagentIntentsFromEntries(entries);
+      const completionEntries = collectCompletionEntries(entries);
+      if (completionEntries.length > 0) {
+        const completionBubbles = completionEntries.map((entry, index) =>
+          historyEntryToBubble(entry, `completion-${entry.timestamp}-${index}`),
+        );
         upsertMessages(completionBubbles);
       }
     } catch {
@@ -246,7 +196,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     } finally {
       historyPollingRef.current = false;
     }
-  }, [getClient, state, upsertMessages]);
+  }, [collectCompletionEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
     if (state !== 'connected') return;
@@ -350,14 +300,14 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
               input={input}
               onInputChange={setInput}
               onInputEnter={handleSend}
-            onSend={handleSend}
-            onClose={() => setIsOpen(false)}
-            onMessagesScroll={handleMessagesScroll}
-            placement={panelPlacement}
-            panelMotionStyle={{ x: panelX, y: panelY }}
-            panelRef={panelRef}
-            inputRef={inputRef}
-            chatEndRef={chatEndRef}
+              onSend={handleSend}
+              onClose={() => setIsOpen(false)}
+              onMessagesScroll={handleMessagesScroll}
+              placement={panelPlacement}
+              panelMotionStyle={{ x: panelX, y: panelY }}
+              panelRef={panelRef}
+              inputRef={inputRef}
+              chatEndRef={chatEndRef}
             />
           )}
         </AnimatePresence>
@@ -365,3 +315,4 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     </>
   );
 }
+

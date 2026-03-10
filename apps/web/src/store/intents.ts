@@ -10,6 +10,8 @@ export type IntentCard = {
   needsAttention: boolean;
   progress?: number;
   artifactCount?: number;
+  subagentSessionKey?: string;
+  runtimeContextText?: string;
 };
 
 type IntentStore = {
