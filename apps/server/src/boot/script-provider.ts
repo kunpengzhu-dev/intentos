@@ -146,6 +146,13 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function resolveBootCallbackUrl(callbackBaseUrl: string): string {
+  if (env.BOOT_CALLBACK_BASE_URL && env.BOOT_CALLBACK_BASE_URL.trim().length > 0) {
+    return env.BOOT_CALLBACK_BASE_URL;
+  }
+  return callbackBaseUrl;
+}
+
 async function runBootScriptInProcess(
   target: InProcessScriptTarget,
   context: Omit<BootScriptRunnerContext, 'args'>,
@@ -185,10 +192,11 @@ export function createScriptBootProvider(): BootProvider {
   return {
     run({ sessionId, callbackToken, callbackBaseUrl }) {
       return new Promise<void>((resolvePromise, rejectPromise) => {
+        const callbackUrl = resolveBootCallbackUrl(callbackBaseUrl);
         const childEnv: Record<string, string | undefined> = {
           ...process.env,
           BOOT_SESSION_ID: sessionId,
-          BOOT_CALLBACK_URL: env.BOOT_CALLBACK_BASE_URL ?? callbackBaseUrl,
+          BOOT_CALLBACK_URL: callbackUrl,
           BOOT_TOKEN: callbackToken,
         };
         if (process.versions.electron && !childEnv.ELECTRON_RUN_AS_NODE) {
@@ -224,7 +232,7 @@ export function createScriptBootProvider(): BootProvider {
                 sessionId,
                 callbackToken,
                 callbackBaseUrl,
-                callbackUrl: childEnv.BOOT_CALLBACK_URL ?? callbackBaseUrl,
+                callbackUrl,
                 env: childEnv,
               }).then(() => {
                 if (settled) {

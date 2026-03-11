@@ -12,6 +12,12 @@ import type { BootProvider, ActiveBootSession, BootStepsPayload } from './types.
 import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 
+function resolveBootCallbackBaseUrl(): string {
+  return env.BOOT_CALLBACK_BASE_URL && env.BOOT_CALLBACK_BASE_URL.trim().length > 0
+    ? env.BOOT_CALLBACK_BASE_URL
+    : `http://localhost:${env.PORT}`;
+}
+
 export class BootService {
   private readonly activeBootsBySession = new Map<string, ActiveBootSession>();
   private readonly activeBootsByToken = new Map<string, ActiveBootSession>();
@@ -56,7 +62,7 @@ export class BootService {
       await this.provider.run({
         sessionId: session.id,
         callbackToken,
-        callbackBaseUrl: env.BOOT_CALLBACK_BASE_URL ?? `http://localhost:${env.PORT}`,
+        callbackBaseUrl: resolveBootCallbackBaseUrl(),
       });
     } catch (error) {
       this.emitFailed(session, {
