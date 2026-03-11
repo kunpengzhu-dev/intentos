@@ -145,6 +145,21 @@ function historyEntrySignature(entry: ChatHistoryEntry): string {
   return entry.id;
 }
 
+function normalizeComparableText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function extractComparableAssistantText(entry: ChatHistoryEntry): string {
+  if (entry.role !== 'assistant') {
+    return '';
+  }
+  const text = entry.parts
+    .filter((part): part is Extract<ChatHistoryPart, { type: 'text' }> => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n');
+  return normalizeComparableText(text);
+}
+
 function safeStringify(value: unknown, space?: number): string {
   try {
     return JSON.stringify(value, null, space);
@@ -287,6 +302,7 @@ export function createMessageHandler(ctx: AppContext) {
         const contextId = typeof p.contextId === 'string' && p.contextId.length > 0 ? p.contextId : 'global';
         let hasStreamedChatDelta = false;
         const seenHistorySignatures = new Set<string>();
+        const seenAssistantHistoryTexts = new Set<string>();
         const chatStartTs = Date.now();
 
         void ctx.chatService.streamAssistantReply({
@@ -307,13 +323,16 @@ export function createMessageHandler(ctx: AppContext) {
             });
           },
           onFinal: (finalText) => {
+            const normalizedFinalText = normalizeComparableText(finalText);
+            const finalCoveredByHistory =
+              normalizedFinalText.length > 0 && seenAssistantHistoryTexts.has(normalizedFinalText);
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
               payload: {
                 // Always send full final text once to avoid tail truncation when
                 // intermediate deltas are sparse or coalesced.
-                delta: finalText,
+                delta: finalCoveredByHistory ? '' : finalText,
                 done: true,
                 contextId,
               },
@@ -321,6 +340,13 @@ export function createMessageHandler(ctx: AppContext) {
           },
           onHistory: (historyPayload) => {
             const recent = pickRecentHistory(historyPayload);
+            for (const entry of recent) {
+              if (entry.timestamp < chatStartTs) continue;
+              const text = extractComparableAssistantText(entry);
+              if (text) {
+                seenAssistantHistoryTexts.add(text);
+              }
+            }
             const missing = recent
               .filter((entry) => entry.timestamp >= chatStartTs)
               .filter((entry) => {
