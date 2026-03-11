@@ -4,6 +4,7 @@ type DesktopBridge = {
 
 type ImportMetaEnvLike = {
   VITE_API_BASE_URL?: string;
+  VITE_BOOT_ALWAYS_SHOW?: string;
 };
 
 function readDesktopBridge(): DesktopBridge | undefined {
@@ -13,6 +14,17 @@ function readDesktopBridge(): DesktopBridge | undefined {
 function readEnvApiBaseUrl(): string | undefined {
   const meta = import.meta as ImportMeta & { env?: ImportMetaEnvLike };
   return meta.env?.VITE_API_BASE_URL;
+}
+
+function readEnvBootAlwaysShow(): string | undefined {
+  const meta = import.meta as ImportMeta & { env?: ImportMetaEnvLike };
+  return meta.env?.VITE_BOOT_ALWAYS_SHOW;
+}
+
+function isTruthyFlag(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
 
 function trimTrailingSlash(value: string): string {
@@ -25,6 +37,10 @@ export function getBackendBaseUrl(): string | null {
 
   const normalized = trimTrailingSlash(candidate);
   return normalized.length > 0 ? normalized : null;
+}
+
+export function shouldAlwaysShowBootFromEnv(): boolean {
+  return isTruthyFlag(readEnvBootAlwaysShow());
 }
 
 export function getWebSocketUrl(): string {

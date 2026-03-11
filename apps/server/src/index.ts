@@ -37,7 +37,7 @@ async function createServerApp(): Promise<FastifyInstance> {
   await app.register(fastifyWebsocket);
 
   const database = createDatabase();
-  logger.info(`Database initialized at ${env.DATABASE_URL}`);
+  logger.info(`Database initialized at ${env.DATABASE_URL} (mode=${database.mode})`);
   const agentAdapter = createAgentAdapter();
   logger.info(`Agent adapter initialized: ${agentAdapter.provider}`);
   const chatService = new ChatService(env);

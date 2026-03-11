@@ -12,10 +12,11 @@ type BootStore = {
   phase: 'checking' | 'ready' | 'failed';
   checks: BootCheck[];
   progress: number;
+  failureReason?: string;
   setPhase: (phase: 'checking' | 'ready' | 'failed') => void;
   startBoot: (payload: BootStartAckPayload) => void;
   updateCheck: (payload: BootStepUpdatedPayload) => void;
-  failBoot: () => void;
+  failBoot: (reason?: string) => void;
   reset: () => void;
 };
 
@@ -43,12 +44,14 @@ export const useBootStore = create<BootStore>((set) => ({
   phase: 'checking',
   checks: [],
   progress: 0,
+  failureReason: undefined,
   setPhase: (phase) => set({ phase }),
   startBoot: ({ steps }) =>
     set({
       phase: 'checking',
       checks: toBootChecks(steps),
       progress: 0,
+      failureReason: undefined,
     }),
   updateCheck: ({ stepId, state, message, error, updatedAt }) =>
     set((store) => {
@@ -66,8 +69,9 @@ export const useBootStore = create<BootStore>((set) => ({
         checks,
         progress: calculateProgress(checks),
         phase: state === 'failed' ? 'failed' : store.phase,
+        failureReason: state === 'failed' ? (error ?? message ?? store.failureReason) : store.failureReason,
       };
     }),
-  failBoot: () => set({ phase: 'failed' }),
-  reset: () => set({ phase: 'checking', checks: [], progress: 0 }),
+  failBoot: (reason) => set({ phase: 'failed', failureReason: reason }),
+  reset: () => set({ phase: 'checking', checks: [], progress: 0, failureReason: undefined }),
 }));

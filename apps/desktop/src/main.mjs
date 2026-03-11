@@ -1,5 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron';
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,6 +12,67 @@ const serverBaseUrlFromEnv = process.env.INTENTOS_SERVER_URL;
 const preloadPath = path.resolve(__dirname, 'preload.mjs');
 let embeddedServer = null;
 let isQuitting = false;
+
+function stringifyError(error) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}\n${error.stack ?? ''}`.trim();
+  }
+  return String(error);
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function writeStartupErrorLog(error) {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  mkdirSync(logsDir, { recursive: true });
+  const logPath = path.join(logsDir, 'startup-error.log');
+  const body = [
+    `time=${new Date().toISOString()}`,
+    `platform=${process.platform}`,
+    `arch=${process.arch}`,
+    `electron=${process.versions.electron ?? 'unknown'}`,
+    stringifyError(error),
+    '',
+  ].join('\n');
+  appendFileSync(logPath, body, 'utf8');
+  return logPath;
+}
+
+function createStartupErrorWindow(error, logPath) {
+  const details = stringifyError(error);
+  const nativeHint = /better-sqlite3|NODE_MODULE_VERSION|invalid ELF|wrong ELF|module did not self-register/i.test(details)
+    ? '\n\nHint: this often means a native addon ABI mismatch (for example better-sqlite3 not built for HarmonyOS Electron).'
+    : '';
+  const html = `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Startup Failed</title></head>
+  <body style="font-family: sans-serif; padding: 16px; background: #0b1020; color: #e5e7eb;">
+    <h2>IntentOS failed to start</h2>
+    <p>Log file: <code>${escapeHtml(logPath)}</code></p>
+    <pre style="white-space: pre-wrap; background: #111827; padding: 12px; border-radius: 8px;">${escapeHtml(details + nativeHint)}</pre>
+  </body>
+</html>`;
+
+  const errorWindow = new BrowserWindow({
+    width: 980,
+    height: 720,
+    backgroundColor: '#0b1020',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  void errorWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
 
 function findFirstExistingPath(paths) {
   for (const candidate of paths) {
@@ -72,7 +133,10 @@ async function startEmbeddedServer() {
   const userDataDir = app.getPath('userData');
   process.env.PORT = String(port);
   process.env.BOOT_CALLBACK_BASE_URL = `http://127.0.0.1:${port}`;
-  process.env.BOOT_PROVIDER_COMMAND ??= process.execPath;
+  const runtimeNodeCommand = process.argv0 || process.execPath;
+  if (!process.env.BOOT_PROVIDER_COMMAND || process.env.BOOT_PROVIDER_COMMAND === 'node') {
+    process.env.BOOT_PROVIDER_COMMAND = runtimeNodeCommand;
+  }
   process.env.DATABASE_URL ??= path.join(userDataDir, 'data', 'intentos.db');
   process.env.ARTIFACT_STORAGE_DIR ??= path.join(userDataDir, 'artifacts');
 
@@ -128,8 +192,9 @@ app.whenReady().then(async () => {
     }
   });
 }).catch((error) => {
+  const logPath = writeStartupErrorLog(error);
   console.error('[desktop] failed to initialize app', error);
-  app.quit();
+  createStartupErrorWindow(error, logPath);
 });
 
 app.on('window-all-closed', () => {

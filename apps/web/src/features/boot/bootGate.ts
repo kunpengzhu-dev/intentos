@@ -1,3 +1,5 @@
+import { shouldAlwaysShowBootFromEnv } from '../../lib/runtimeConfig';
+
 const BOOT_GATE_VERSION = '2026-03-boot-v1';
 const BOOT_GATE_KEY = `intentos:boot-seen:${BOOT_GATE_VERSION}`;
 
@@ -7,6 +9,7 @@ export function shouldForceBootFromUrl(search: string): boolean {
 }
 
 export function shouldShowBoot(search: string): boolean {
+  if (shouldAlwaysShowBootFromEnv()) return true;
   if (shouldForceBootFromUrl(search)) return true;
   try {
     return window.localStorage.getItem(BOOT_GATE_KEY) !== '1';

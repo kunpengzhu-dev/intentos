@@ -68,7 +68,7 @@ export class BootService {
 
   handleStepsCallback(callbackToken: string, payload: BootStepsPayload): boolean {
     const active = this.activeBootsByToken.get(callbackToken);
-    if (!active || active.status !== 'starting') {
+    if (!active) {
       return false;
     }
 
@@ -85,6 +85,18 @@ export class BootService {
         return false;
       }
       ids.add(step.id);
+    }
+
+    if (active.status === 'started') {
+      // Idempotent accept for repeated /steps callbacks from the same token.
+      if (areSameSteps(active.steps, steps)) {
+        return true;
+      }
+      return false;
+    }
+
+    if (active.status !== 'starting') {
+      return false;
     }
 
     active.steps = steps;
@@ -244,4 +256,25 @@ export class BootService {
   private resolveSession(sessionId: string): WsSession | null {
     return getSessions().get(sessionId) ?? null;
   }
+}
+
+function areSameSteps(
+  left: ActiveBootSession['steps'],
+  right: ActiveBootSession['steps'],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let i = 0; i < left.length; i += 1) {
+    const a = left[i];
+    const b = right[i];
+    if (!a || !b) {
+      return false;
+    }
+    if (a.id !== b.id || a.label !== b.label || (a.weight ?? 1) !== (b.weight ?? 1)) {
+      return false;
+    }
+  }
+  return true;
 }

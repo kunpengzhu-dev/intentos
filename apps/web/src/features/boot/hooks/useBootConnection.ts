@@ -10,14 +10,14 @@ import { useBootStore } from '../../../store/boot';
 import { useConnectionStore } from '../../../store/connection';
 
 export function useBootConnection() {
-  const { phase, checks, progress, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
+  const { phase, checks, progress, failureReason, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
   const { getClient, state } = useConnectionStore();
   const bootSent = useRef(false);
 
   const failureText = useMemo(() => {
     const failedCheck = checks.find((check) => check.state === 'failed');
-    return failedCheck?.error ?? 'Startup checks failed. Please inspect the failed subsystem and retry.';
-  }, [checks]);
+    return failedCheck?.error ?? failureReason ?? 'Startup checks failed. Please inspect the failed subsystem and retry.';
+  }, [checks, failureReason]);
 
   useEffect(() => {
     if (state !== 'connected' || bootSent.current) return;
@@ -35,14 +35,18 @@ export function useBootConnection() {
     });
 
     const offFailed = client.on('boot/failed', (env: Envelope) => {
-      void (env.payload as BootFailedPayload);
-      failBoot();
+      const payload = env.payload as BootFailedPayload;
+      const reason = payload.stepId
+        ? `[${payload.stepId}] ${payload.reason}`
+        : payload.reason;
+      failBoot(reason);
     });
 
     client.send('boot/start', {}).then((env) => {
       startBoot(env.payload as BootStartAckPayload);
-    }).catch(() => {
-      failBoot();
+    }).catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : 'boot/start request failed';
+      failBoot(reason);
     });
 
     return () => {

@@ -105,6 +105,15 @@ If you want to point Electron at a different backend:
 INTENTOS_SERVER_URL=http://localhost:3001 pnpm dev:desktop
 ```
 
+If you want the Boot screen to appear on every launch (ignore localStorage gate):
+
+```bash
+VITE_BOOT_ALWAYS_SHOW=1 pnpm dev:desktop
+VITE_BOOT_ALWAYS_SHOW=1 pnpm prepare:harmony
+```
+
+For persistent local usage, put `VITE_BOOT_ALWAYS_SHOW=1` in the repo root `.env`.
+
 ### What you'll see
 
 1. **Boot screen** — System checks (server, agent, storage) with animated status
@@ -117,7 +126,7 @@ INTENTOS_SERVER_URL=http://localhost:3001 pnpm dev:desktop
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19, Vite 7, Tailwind CSS 4, Zustand, Framer Motion |
-| Backend | Fastify, WebSocket (ws), SQLite (better-sqlite3), Drizzle ORM |
+| Backend | Fastify, WebSocket (ws), in-memory event store |
 | Protocol | Event-sourced, dual-layer streams (global + run), cursor-based replay |
 | Build | pnpm workspaces, Turborepo, TypeScript 5.8 |
 
