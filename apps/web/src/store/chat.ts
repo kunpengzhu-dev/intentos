@@ -27,9 +27,30 @@ function normalizeTextForCompare(content: string): string {
   return content.replace(/\s+/g, ' ').trim();
 }
 
+function compactTextForCompare(content: string): string {
+  return content.replace(/\s+/g, '');
+}
+
 function mergeAssistantContent(current: string, delta: string): string {
   if (!delta) return current;
   if (delta === current) return current;
+  const currentCompact = compactTextForCompare(current);
+  const deltaCompact = compactTextForCompare(delta);
+  if (currentCompact && deltaCompact && deltaCompact === currentCompact) {
+    // Keep richer formatting (usually final payload) when semantic text is identical.
+    return delta.length >= current.length ? delta : current;
+  }
+  if (currentCompact && deltaCompact && deltaCompact.startsWith(currentCompact)) {
+    const appendedCompact = deltaCompact.slice(currentCompact.length);
+    // Guard against duplicated final payloads like "<text><text>" with possible whitespace differences.
+    if (appendedCompact === currentCompact) {
+      return current;
+    }
+    return delta;
+  }
+  if (currentCompact && deltaCompact && (currentCompact.startsWith(deltaCompact) || currentCompact.endsWith(deltaCompact))) {
+    return current;
+  }
   if (delta.startsWith(current)) {
     const appended = delta.slice(current.length);
     // Guard against duplicated final payloads like "<text><text>".
@@ -159,16 +180,21 @@ export const useChatStore = create<ChatStore>((set) => ({
         // merge this delta/final into the latest assistant bubble instead of duplicating.
         const maxRecentGapMs = 8000;
         const deltaNormalized = normalizeTextForCompare(delta);
+        const deltaCompact = compactTextForCompare(delta);
         for (let i = msgs.length - 1; i >= 0; i -= 1) {
           const candidate = msgs[i];
           if (candidate.role !== 'assistant' || candidate.streaming) continue;
           if (Math.abs(ts - candidate.ts) > maxRecentGapMs) break;
           const candidateNormalized = normalizeTextForCompare(candidate.content);
+          const candidateCompact = compactTextForCompare(candidate.content);
           const related =
             !delta ||
             candidateNormalized === deltaNormalized ||
+            (candidateCompact.length > 0 && candidateCompact === deltaCompact) ||
             candidate.content.startsWith(delta) ||
             delta.startsWith(candidate.content) ||
+            (candidateCompact.length > 0 && deltaCompact.startsWith(candidateCompact)) ||
+            (deltaCompact.length > 0 && candidateCompact.startsWith(deltaCompact)) ||
             candidate.content.endsWith(delta) ||
             delta.endsWith(candidate.content);
           if (!related) continue;
