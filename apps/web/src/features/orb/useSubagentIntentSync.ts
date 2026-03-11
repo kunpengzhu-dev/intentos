@@ -5,14 +5,6 @@ import { useIntentStore, type IntentCard } from '../../store/intents';
 
 const INTERNAL_RUNTIME_CONTEXT_PREFIX = 'OpenClaw runtime context (internal):';
 
-type RawStructuredEntry = {
-  role?: string;
-  timestamp?: number;
-  toolCallId?: string;
-  toolName?: string;
-  content?: Array<Record<string, unknown>>;
-};
-
 type SpawnToolCallInfo = {
   toolCallId: string;
   task: string;
@@ -40,52 +32,42 @@ function parseJson<T>(value: string): T | null {
   }
 }
 
-function parseStructuredEntry(entry: ChatHistoryEntry): RawStructuredEntry | null {
+function extractSpawnToolCallInfos(entry: ChatHistoryEntry): SpawnToolCallInfo[] {
+  const infos: SpawnToolCallInfo[] = [];
   for (const part of entry.parts) {
-    if (part.type !== 'text') continue;
-    const text = part.text?.trim();
-    if (!text || !text.startsWith('{')) continue;
-    const parsed = parseJson<RawStructuredEntry>(text);
-    if (parsed && typeof parsed === 'object') {
-      return parsed;
-    }
-  }
-  return null;
-}
-
-function extractSpawnToolCallInfo(raw: RawStructuredEntry): SpawnToolCallInfo | null {
-  if (raw.role !== 'assistant' || !Array.isArray(raw.content)) return null;
-  for (const item of raw.content) {
-    const type = typeof item?.type === 'string' ? item.type : '';
-    const name = typeof item?.name === 'string' ? item.name : '';
-    if (type !== 'toolCall' || name !== 'sessions_spawn') continue;
-    const toolCallId = typeof item.id === 'string' ? item.id : '';
-    if (!toolCallId) continue;
-    const args = item.arguments && typeof item.arguments === 'object'
-      ? (item.arguments as Record<string, unknown>)
-      : null;
+    if (part.type !== 'toolCall') continue;
+    if (part.name !== 'sessions_spawn') continue;
+    if (!part.id) continue;
+    const args = part.argumentsJson ? parseJson<Record<string, unknown>>(part.argumentsJson) : null;
     const task = typeof args?.task === 'string' ? args.task.trim() : '';
-    return { toolCallId, task };
+    infos.push({
+      toolCallId: part.id,
+      task,
+    });
   }
-  return null;
+  return infos;
 }
 
-function extractSpawnToolResultInfo(raw: RawStructuredEntry): SpawnToolResultInfo | null {
-  if (raw.role !== 'toolResult' || raw.toolName !== 'sessions_spawn') return null;
-  const toolCallId = typeof raw.toolCallId === 'string' ? raw.toolCallId : '';
-  if (!toolCallId) return null;
-  const textPart = Array.isArray(raw.content)
-    ? raw.content.find((item) => item?.type === 'text' && typeof item?.text === 'string')
-    : null;
-  const payloadText = typeof textPart?.text === 'string' ? textPart.text : '';
-  const payload = parseJson<Record<string, unknown>>(payloadText);
-  if (!payload) return null;
-  const status = typeof payload.status === 'string' ? payload.status : '';
-  const childSessionKey = typeof payload.childSessionKey === 'string' ? payload.childSessionKey : '';
-  if (status !== 'accepted' || !childSessionKey) return null;
-  const runId = typeof payload.runId === 'string' ? payload.runId : undefined;
-  const timestamp = typeof raw.timestamp === 'number' ? raw.timestamp : Date.now();
-  return { toolCallId, childSessionKey, runId, timestamp };
+function extractSpawnToolResultInfos(entry: ChatHistoryEntry): SpawnToolResultInfo[] {
+  const infos: SpawnToolResultInfo[] = [];
+  for (const part of entry.parts) {
+    if (part.type !== 'toolResult') continue;
+    if (part.toolName !== 'sessions_spawn') continue;
+    if (!part.toolCallId) continue;
+    const payload = parseJson<Record<string, unknown>>(part.text);
+    if (!payload) continue;
+    const status = typeof payload.status === 'string' ? payload.status : '';
+    const childSessionKey = typeof payload.childSessionKey === 'string' ? payload.childSessionKey : '';
+    if (status !== 'accepted' || !childSessionKey) continue;
+    const runId = typeof payload.runId === 'string' ? payload.runId : undefined;
+    infos.push({
+      toolCallId: part.toolCallId,
+      childSessionKey,
+      runId,
+      timestamp: entry.timestamp || Date.now(),
+    });
+  }
+  return infos;
 }
 
 function extractSessionKeyFromInternalMessage(text: string): string | null {
@@ -162,57 +144,50 @@ export function useSubagentIntentSync() {
   }, []);
 
   const isSessionsSpawnToolEntry = useCallback((entry: ChatHistoryEntry): boolean => {
-    const raw = parseStructuredEntry(entry);
-    if (!raw) return false;
-    if (extractSpawnToolCallInfo(raw)) return true;
-    if (extractSpawnToolResultInfo(raw)) return true;
-    return false;
+    return extractSpawnToolCallInfos(entry).length > 0 || extractSpawnToolResultInfos(entry).length > 0;
   }, []);
 
   const syncSubagentIntentsFromEntries = useCallback((entries: ChatHistoryEntry[]) => {
     const toolCalls = new Map<string, SpawnToolCallInfo>();
 
     for (const entry of entries) {
-      const raw = parseStructuredEntry(entry);
-      if (!raw) continue;
-      const toolCall = extractSpawnToolCallInfo(raw);
-      if (!toolCall) continue;
-      toolCalls.set(toolCall.toolCallId, toolCall);
+      const infos = extractSpawnToolCallInfos(entry);
+      for (const info of infos) {
+        toolCalls.set(info.toolCallId, info);
+      }
     }
 
     for (const entry of entries) {
-      const raw = parseStructuredEntry(entry);
-      if (!raw) continue;
-      const toolResult = extractSpawnToolResultInfo(raw);
-      if (!toolResult) continue;
+      const infos = extractSpawnToolResultInfos(entry);
+      for (const toolResult of infos) {
+        const linkedCall = toolCalls.get(toolResult.toolCallId);
+        const task = linkedCall?.task || spawnByToolCallIdRef.current.get(toolResult.toolCallId)?.task;
+        const intentId = `spawn:${toolResult.childSessionKey}`;
+        const meta: SpawnIntentMeta = {
+          intentId,
+          sessionKey: toolResult.childSessionKey,
+          runId: toolResult.runId,
+          task,
+        };
+        spawnByToolCallIdRef.current.set(toolResult.toolCallId, meta);
+        spawnBySessionKeyRef.current.set(toolResult.childSessionKey, meta);
 
-      const linkedCall = toolCalls.get(toolResult.toolCallId);
-      const task = linkedCall?.task || spawnByToolCallIdRef.current.get(toolResult.toolCallId)?.task;
-      const intentId = `spawn:${toolResult.childSessionKey}`;
-      const meta: SpawnIntentMeta = {
-        intentId,
-        sessionKey: toolResult.childSessionKey,
-        runId: toolResult.runId,
-        task,
-      };
-      spawnByToolCallIdRef.current.set(toolResult.toolCallId, meta);
-      spawnBySessionKeyRef.current.set(toolResult.childSessionKey, meta);
-
-      const { title, summary } = summarizeTask(task);
-      const nextCard: IntentCard = {
-        intentId,
-        title,
-        summary: `${summary}\n\nsession_key: ${toolResult.childSessionKey}`,
-        status: 'active',
-        currentRunId: toolResult.runId ?? `local:${toolResult.childSessionKey}`,
-        updatedAt: toolResult.timestamp,
-        needsAttention: false,
-        subagentSessionKey: toolResult.childSessionKey,
-        runtimeContextText: undefined,
-      };
-      const existing = useIntentStore.getState().intents.get(intentId);
-      if (shouldUpsertIntent(existing, nextCard)) {
-        upsertIntent(nextCard);
+        const { title, summary } = summarizeTask(task);
+        const nextCard: IntentCard = {
+          intentId,
+          title,
+          summary: `${summary}\n\nsession_key: ${toolResult.childSessionKey}`,
+          status: 'active',
+          currentRunId: toolResult.runId ?? `local:${toolResult.childSessionKey}`,
+          updatedAt: toolResult.timestamp,
+          needsAttention: false,
+          subagentSessionKey: toolResult.childSessionKey,
+          runtimeContextText: undefined,
+        };
+        const existing = useIntentStore.getState().intents.get(intentId);
+        if (shouldUpsertIntent(existing, nextCard)) {
+          upsertIntent(nextCard);
+        }
       }
     }
 
@@ -310,4 +285,3 @@ export function useSubagentIntentSync() {
     resetSubagentSyncState,
   };
 }
-

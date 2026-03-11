@@ -148,16 +148,21 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
       const payload = env.payload as ChatHistorySyncPayload;
       const entries: ChatHistoryEntry[] = Array.isArray(payload.entries) ? payload.entries : [];
       syncSubagentIntentsFromEntries(entries);
-      const bubbles = filterDisplayEntries(entries).map((entry, index) =>
-        historyEntryToBubble(entry, `${env.id}-${index}`),
-      );
-      upsertMessages(bubbles);
+      // Incremental history sync is reserved for special-field reconciliation
+      // (subagent/runtime-context flows). Regular chat text stays on stream+final.
+      const completionEntries = collectCompletionEntries(entries);
+      if (completionEntries.length > 0) {
+        const bubbles = completionEntries.map((entry, index) =>
+          historyEntryToBubble(entry, `${env.id}-completion-${index}`),
+        );
+        upsertMessages(bubbles);
+      }
     });
     return () => {
       offDelta();
       offHistory();
     };
-  }, [applyAssistantDelta, filterDisplayEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
+  }, [applyAssistantDelta, collectCompletionEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
     if (state !== 'connected') {
@@ -315,4 +320,3 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     </>
   );
 }
-

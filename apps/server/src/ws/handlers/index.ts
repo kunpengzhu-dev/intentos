@@ -47,7 +47,6 @@ function getTextFromContentPart(part: unknown): string {
   if (!part || typeof part !== 'object') return '';
   const obj = part as Record<string, unknown>;
   if (typeof obj.text === 'string') return obj.text;
-  if (typeof obj.thinking === 'string') return obj.thinking;
   return '';
 }
 
@@ -62,8 +61,7 @@ function normalizeContentPart(part: unknown): ChatHistoryPart[] {
   }
 
   if (type === 'thinking') {
-    const text = asString(partObj.thinking);
-    return text ? [{ type: 'text', text }] : [];
+    return [];
   }
 
   if (type === 'toolCall') {
@@ -102,18 +100,30 @@ function normalizeHistoryEntry(entry: Record<string, unknown>): ChatHistoryEntry
   const timestamp = typeof entry.timestamp === 'number' ? entry.timestamp : Date.now();
   const stopReason = asString(entry.stopReason) || undefined;
   const content = Array.isArray(entry.content) ? entry.content : [];
-  const structured = content.some((part) => {
-    if (!part || typeof part !== 'object') return false;
-    const type = asString((part as Record<string, unknown>).type);
-    return type !== 'text';
-  });
   let parts: ChatHistoryPart[] = [];
 
-  if (structured || role === 'toolResult') {
-    const rawEntry = safeStringify(entry, 2);
-    parts = rawEntry ? [{ type: 'text', text: rawEntry }] : [];
+  parts = content.flatMap((part) => normalizeContentPart(part));
+
+  if (role === 'toolResult') {
+    const toolTextFromParts = parts
+      .filter((part): part is Extract<ChatHistoryPart, { type: 'text' }> => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n')
+      .trim();
+    const fallbackToolText =
+      asString(entry.message).trim()
+      || safeStringify(entry.result ?? entry.content ?? null);
+    const text = toolTextFromParts || fallbackToolText;
+    parts = text
+      ? [{
+        type: 'toolResult',
+        toolCallId: asString(entry.toolCallId) || undefined,
+        toolName: asString(entry.toolName) || undefined,
+        text,
+        isError: typeof entry.isError === 'boolean' ? entry.isError : undefined,
+      }]
+      : [];
   } else {
-    parts = content.flatMap((part) => normalizeContentPart(part));
     if (parts.length === 0) {
       const fallback = asString(entry.message) || safeStringify(entry.content ?? null);
       if (fallback) {
@@ -144,21 +154,6 @@ function pickRecentHistory(historyPayload: unknown): ChatHistoryEntry[] {
 
 function historyEntrySignature(entry: ChatHistoryEntry): string {
   return entry.id;
-}
-
-function normalizeComparableText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-function extractComparableAssistantText(entry: ChatHistoryEntry): string {
-  if (entry.role !== 'assistant') {
-    return '';
-  }
-  const text = entry.parts
-    .filter((part): part is Extract<ChatHistoryPart, { type: 'text' }> => part.type === 'text')
-    .map((part) => part.text)
-    .join('\n');
-  return normalizeComparableText(text);
 }
 
 function safeStringify(value: unknown, space?: number): string {
@@ -303,7 +298,6 @@ export function createMessageHandler(ctx: AppContext) {
         const contextId = typeof p.contextId === 'string' && p.contextId.length > 0 ? p.contextId : 'global';
         let hasStreamedChatDelta = false;
         const seenHistorySignatures = new Set<string>();
-        const seenAssistantHistoryTexts = new Set<string>();
         const chatStartTs = Date.now();
         const traceEnabled = env.CHAT_TRACE_LOGS;
         const traceId = `${session.id}-${chatStartTs.toString(36)}`;
@@ -336,21 +330,18 @@ export function createMessageHandler(ctx: AppContext) {
             });
           },
           onFinal: (finalText) => {
-            const normalizedFinalText = normalizeComparableText(finalText);
-            const finalCoveredByHistory =
-              normalizedFinalText.length > 0 && seenAssistantHistoryTexts.has(normalizedFinalText);
             if (traceEnabled) {
               logger.debug(
-                `[chat-trace ${traceId}] onFinal coveredByHistory=${String(finalCoveredByHistory)} raw=${safeStringify(finalText)}`,
+                `[chat-trace ${traceId}] onFinal raw=${safeStringify(finalText)}`,
               );
             }
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
               payload: {
-                // Always send full final text once to avoid tail truncation when
-                // intermediate deltas are sparse or coalesced.
-                delta: finalCoveredByHistory ? '' : finalText,
+                // Final payload always carries the complete text and is used by
+                // client to guarantee the streaming bubble ends in exact state.
+                delta: finalText,
                 done: true,
                 contextId,
               },
@@ -362,13 +353,6 @@ export function createMessageHandler(ctx: AppContext) {
               logger.debug(
                 `[chat-trace ${traceId}] onHistory.raw ${safeStringify(historyPayload)}`,
               );
-            }
-            for (const entry of recent) {
-              if (entry.timestamp < chatStartTs) continue;
-              const text = extractComparableAssistantText(entry);
-              if (text) {
-                seenAssistantHistoryTexts.add(text);
-              }
             }
             const missing = recent
               .filter((entry) => entry.timestamp >= chatStartTs)
