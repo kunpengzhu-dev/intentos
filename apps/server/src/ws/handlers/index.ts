@@ -12,6 +12,7 @@ import { nanoid } from 'nanoid';
 import { checkIdempotency, recordIdempotency, hashPayload } from '../../intent/idempotency.js';
 import { createIntent } from '../../intent/service.js';
 import { getEvents, getStreamHead } from '../../intent/event-store.js';
+import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 
 function extractHistoryEntries(historyPayload: unknown): Array<Record<string, unknown>> {
@@ -160,6 +161,82 @@ function extractComparableAssistantText(entry: ChatHistoryEntry): string {
   return normalizeComparableText(text);
 }
 
+function summarizeTextForTrace(text: string): Record<string, unknown> {
+  return {
+    len: text.length,
+    hash: stableHash(normalizeComparableText(text)),
+    preview: text.slice(0, 180),
+  };
+}
+
+function extractTextFromUnknownMessage(message: unknown): string {
+  if (!message) return '';
+  if (typeof message === 'string') return message;
+  if (typeof message !== 'object') return '';
+
+  const msgObj = message as Record<string, unknown>;
+  if (typeof msgObj.text === 'string') return msgObj.text;
+  if (typeof msgObj.delta === 'string') return msgObj.delta;
+  if (typeof msgObj.thinking === 'string') return msgObj.thinking;
+
+  const content = msgObj.content;
+  if (!Array.isArray(content)) return '';
+  return content.map((part) => {
+    if (typeof part === 'string') return part;
+    if (!part || typeof part !== 'object') return '';
+    const partObj = part as Record<string, unknown>;
+    if (typeof partObj.text === 'string') return partObj.text;
+    if (typeof partObj.delta === 'string') return partObj.delta;
+    if (typeof partObj.thinking === 'string') return partObj.thinking;
+    return '';
+  }).filter((item) => item.length > 0).join('\n');
+}
+
+function summarizeHistoryEntryForTrace(entry: ChatHistoryEntry): Record<string, unknown> {
+  const joinedText = entry.parts
+    .filter((part): part is Extract<ChatHistoryPart, { type: 'text' }> => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n');
+  return {
+    id: entry.id,
+    role: entry.role,
+    ts: entry.timestamp,
+    stopReason: entry.stopReason,
+    partTypes: entry.parts.map((part) => part.type),
+    text: joinedText ? summarizeTextForTrace(joinedText) : undefined,
+  };
+}
+
+function summarizeGatewayFrameForTrace(rawFrame: string): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    rawLen: rawFrame.length,
+    rawPreview: rawFrame.slice(0, 260),
+  };
+  try {
+    const parsed = JSON.parse(rawFrame) as Record<string, unknown>;
+    const payload = parsed.payload && typeof parsed.payload === 'object'
+      ? (parsed.payload as Record<string, unknown>)
+      : null;
+    const messageText = extractTextFromUnknownMessage(payload?.message);
+    return {
+      ...base,
+      type: asString(parsed.type),
+      event: asString(parsed.event),
+      id: asString(parsed.id),
+      ok: typeof parsed.ok === 'boolean' ? parsed.ok : undefined,
+      state: asString(payload?.state),
+      payloadKeys: payload ? Object.keys(payload).slice(0, 12) : [],
+      message: messageText ? summarizeTextForTrace(messageText) : undefined,
+      error: parsed.error ? safeStringify(parsed.error) : undefined,
+    };
+  } catch {
+    return {
+      ...base,
+      parseError: true,
+    };
+  }
+}
+
 function safeStringify(value: unknown, space?: number): string {
   try {
     return JSON.stringify(value, null, space);
@@ -304,6 +381,13 @@ export function createMessageHandler(ctx: AppContext) {
         const seenHistorySignatures = new Set<string>();
         const seenAssistantHistoryTexts = new Set<string>();
         const chatStartTs = Date.now();
+        const traceEnabled = env.CHAT_TRACE_LOGS;
+        const traceId = `${session.id}-${chatStartTs.toString(36)}`;
+        if (traceEnabled) {
+          logger.info(
+            `[chat-trace ${traceId}] start context=${contextId} message=${safeStringify(summarizeTextForTrace(message))}`,
+          );
+        }
 
         void ctx.chatService.streamAssistantReply({
           session,
@@ -312,6 +396,11 @@ export function createMessageHandler(ctx: AppContext) {
           onDelta: (delta) => {
             if (!delta) return;
             hasStreamedChatDelta = true;
+            if (traceEnabled) {
+              logger.debug(
+                `[chat-trace ${traceId}] onDelta ${safeStringify(summarizeTextForTrace(delta))}`,
+              );
+            }
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
@@ -326,6 +415,11 @@ export function createMessageHandler(ctx: AppContext) {
             const normalizedFinalText = normalizeComparableText(finalText);
             const finalCoveredByHistory =
               normalizedFinalText.length > 0 && seenAssistantHistoryTexts.has(normalizedFinalText);
+            if (traceEnabled) {
+              logger.debug(
+                `[chat-trace ${traceId}] onFinal coveredByHistory=${String(finalCoveredByHistory)} ${safeStringify(summarizeTextForTrace(finalText))}`,
+              );
+            }
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
@@ -357,12 +451,27 @@ export function createMessageHandler(ctx: AppContext) {
                 seenHistorySignatures.add(signature);
                 return true;
               });
+            if (traceEnabled) {
+              logger.debug(
+                `[chat-trace ${traceId}] onHistory recent=${recent.length} missing=${missing.length}`,
+              );
+              if (recent.length > 0) {
+                logger.debug(
+                  `[chat-trace ${traceId}] onHistory.sample ${safeStringify(recent.slice(-3).map((entry) => summarizeHistoryEntryForTrace(entry)))}`,
+                );
+              }
+            }
 
             if (missing.length > 0) {
               const historySyncPayload: ChatHistorySyncPayload = {
                 contextId,
                 entries: missing,
               };
+              if (traceEnabled) {
+                logger.debug(
+                  `[chat-trace ${traceId}] emit chat/history_sync ${safeStringify(missing.map((entry) => summarizeHistoryEntryForTrace(entry)))}`,
+                );
+              }
               sendEnvelope(session.ws, {
                 id: nanoid(), version: 1, kind: 'notify', type: 'chat/history_sync',
                 ts: Date.now(),
@@ -370,6 +479,13 @@ export function createMessageHandler(ctx: AppContext) {
               });
             }
           },
+          onGatewayFrame: traceEnabled
+            ? (rawFrame) => {
+              logger.debug(
+                `[chat-trace ${traceId}] gateway.frame ${safeStringify(summarizeGatewayFrameForTrace(rawFrame))}`,
+              );
+            }
+            : undefined,
           onError: (error) => {
             logger.error({ err: error, contextId }, 'OpenClaw chat stream failed');
             sendEnvelope(session.ws, {

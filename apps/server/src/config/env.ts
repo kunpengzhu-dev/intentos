@@ -9,10 +9,20 @@ function emptyStringToUndefined(value: unknown): unknown {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+function toBoolean(value: unknown): unknown {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off', ''].includes(normalized)) return false;
+  return value;
+}
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   DATABASE_URL: z.string().default('./data/intentos.db'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('debug'),
+  CHAT_TRACE_LOGS: z.preprocess(toBoolean, z.boolean().default(false)),
   BOOT_PROVIDER_COMMAND: z.string().default('node'),
   BOOT_PROVIDER_ARGS_JSON: z.string().default('["./scripts/mock-boot-provider.mjs"]'),
   BOOT_CALLBACK_BASE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
