@@ -2,23 +2,16 @@ type DesktopBridge = {
   apiBaseUrl?: string;
 };
 
-type ImportMetaEnvLike = {
-  VITE_API_BASE_URL?: string;
-  VITE_BOOT_ALWAYS_SHOW?: string;
-};
-
 function readDesktopBridge(): DesktopBridge | undefined {
   return (window as typeof window & { __INTENTOS_DESKTOP__?: DesktopBridge }).__INTENTOS_DESKTOP__;
 }
 
 function readEnvApiBaseUrl(): string | undefined {
-  const meta = import.meta as ImportMeta & { env?: ImportMetaEnvLike };
-  return meta.env?.VITE_API_BASE_URL;
+  return import.meta.env.VITE_API_BASE_URL;
 }
 
 function readEnvBootAlwaysShow(): string | undefined {
-  const meta = import.meta as ImportMeta & { env?: ImportMetaEnvLike };
-  return meta.env?.VITE_BOOT_ALWAYS_SHOW;
+  return import.meta.env.VITE_BOOT_ALWAYS_SHOW;
 }
 
 function isTruthyFlag(value: string | undefined): boolean {
