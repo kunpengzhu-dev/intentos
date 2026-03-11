@@ -30,7 +30,14 @@ function normalizeTextForCompare(content: string): string {
 function mergeAssistantContent(current: string, delta: string): string {
   if (!delta) return current;
   if (delta === current) return current;
-  if (delta.startsWith(current)) return delta;
+  if (delta.startsWith(current)) {
+    const appended = delta.slice(current.length);
+    // Guard against duplicated final payloads like "<text><text>".
+    if (normalizeTextForCompare(appended) === normalizeTextForCompare(current)) {
+      return current;
+    }
+    return delta;
+  }
   if (current.startsWith(delta)) return current;
   if (current.endsWith(delta)) return current;
   return current + delta;
@@ -74,7 +81,13 @@ export const useChatStore = create<ChatStore>((set) => ({
       for (const incoming of msgs) {
         const previous = merged.get(incoming.id);
         if (previous) {
-          const next = { ...previous, ...incoming };
+          const next = {
+            ...previous,
+            ...incoming,
+            content: incoming.role === 'assistant'
+              ? mergeAssistantContent(previous.content, incoming.content)
+              : incoming.content,
+          };
           if (
             next.role !== previous.role ||
             next.content !== previous.content ||
@@ -91,10 +104,14 @@ export const useChatStore = create<ChatStore>((set) => ({
         if (mergeTargetId) {
           const target = merged.get(mergeTargetId);
           if (target) {
+            const mergedContent = incoming.role === 'assistant'
+              ? mergeAssistantContent(target.content, incoming.content)
+              : incoming.content;
             const next = {
               ...target,
               ...incoming,
               id: mergeTargetId,
+              content: mergedContent,
               streaming: false,
               ts: Math.min(target.ts, incoming.ts),
             };
@@ -173,18 +190,7 @@ export const useChatStore = create<ChatStore>((set) => ({
       }
 
       const current = msgs[streamingIndex];
-      let nextContent = current.content;
-      if (delta.length > 0) {
-        if (delta === current.content) {
-          nextContent = current.content;
-        } else if (delta.startsWith(current.content)) {
-          nextContent = delta;
-        } else if (current.content.endsWith(delta)) {
-          nextContent = current.content;
-        } else {
-          nextContent = current.content + delta;
-        }
-      }
+      const nextContent = mergeAssistantContent(current.content, delta);
       msgs[streamingIndex] = { ...current, content: nextContent, streaming: !done };
       return { messages: msgs, isStreaming: !done };
     }),
