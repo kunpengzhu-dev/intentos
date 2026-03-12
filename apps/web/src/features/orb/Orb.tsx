@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, useMotionValue } from 'framer-motion';
 import type { ChatHistoryEntry, ChatHistoryOkPayload, ChatHistorySyncPayload } from '@intentos/protocol';
+import { useBootStore } from '../../store/boot';
 import { useChatStore } from '../../store/chat';
 import { useConnectionStore } from '../../store/connection';
 import type { OrbTransitionState } from './types';
@@ -26,6 +27,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
   const [input, setInput] = useState('');
   const [panelPlacement, setPanelPlacement] = useState<'top' | 'bottom'>('bottom');
   const { getClient, state } = useConnectionStore();
+  const bootPhase = useBootStore((store) => store.phase);
   const { messages, addMessage, upsertMessages, applyAssistantDelta, isStreaming } = useChatStore();
   const {
     filterDisplayEntries,
@@ -51,6 +53,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
   const skipNextAutoScrollRef = useRef(false);
 
   const isReady = transition.mode === 'ready';
+  const canLoadHistory = state === 'connected' && bootPhase === 'ready' && isReady;
   const visibleOpacity = transition.cornered ? 1 : transition.opacity;
   const stageScale = transition.cornered ? 1 : 0.92 + transition.opacity * 0.08;
   const { dragX, dragY, dragBounds, onDragEnd } = useOrbDrag({
@@ -110,7 +113,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
   }, []);
 
   const loadHistory = useCallback(async (limit: number, reason: 'initial' | 'pagination' = 'initial') => {
-    if (state !== 'connected') return;
+    if (!canLoadHistory) return;
     if (historyLoadingRef.current) return;
     historyLoadingRef.current = true;
     try {
@@ -135,7 +138,7 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     } finally {
       historyLoadingRef.current = false;
     }
-  }, [filterDisplayEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
+  }, [canLoadHistory, filterDisplayEntries, getClient, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
     if (state !== 'connected') return;
@@ -174,12 +177,13 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
       resetSubagentSyncState();
       return;
     }
+    if (!isReady) return;
     if (historyInitializedRef.current) return;
     void loadHistory(HISTORY_PAGE_SIZE, 'initial');
-  }, [loadHistory, resetSubagentSyncState, state]);
+  }, [isReady, loadHistory, resetSubagentSyncState, state]);
 
   const pollSubagentCompletion = useCallback(async () => {
-    if (state !== 'connected') return;
+    if (!canLoadHistory) return;
     if (historyPollingRef.current) return;
     historyPollingRef.current = true;
     try {
@@ -201,16 +205,16 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     } finally {
       historyPollingRef.current = false;
     }
-  }, [collectCompletionEntries, getClient, state, syncSubagentIntentsFromEntries, upsertMessages]);
+  }, [canLoadHistory, collectCompletionEntries, getClient, syncSubagentIntentsFromEntries, upsertMessages]);
 
   useEffect(() => {
-    if (state !== 'connected') return;
+    if (!canLoadHistory) return;
     const timer = window.setInterval(() => {
       if (useChatStore.getState().isStreaming) return;
       void pollSubagentCompletion();
     }, HISTORY_SYNC_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [pollSubagentCompletion, state]);
+  }, [canLoadHistory, pollSubagentCompletion]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -272,11 +276,12 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
 
   const handleMessagesScroll = useCallback((scrollTop: number) => {
     if (!isOpen) return;
+    if (!canLoadHistory) return;
     if (scrollTop > 24) return;
     if (historyLoadingRef.current) return;
     if (!historyHasMoreRef.current) return;
     void loadHistory(historyLimitRef.current + HISTORY_PAGE_SIZE, 'pagination');
-  }, [isOpen, loadHistory]);
+  }, [canLoadHistory, isOpen, loadHistory]);
 
   return (
     <>

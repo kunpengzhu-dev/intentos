@@ -3,6 +3,7 @@ import { AppBackdrop } from '@intentos/ui/react';
 import mercuryBackground from './assets/backgrounds/mercury-background.jpg';
 import { BootPage } from './features/boot/BootPage';
 import { markBootSeen, shouldShowBoot } from './features/boot/bootGate';
+import { useBootSession } from './features/boot/hooks';
 import { ExecutionPage } from './features/execution/ExecutionPage';
 import { HomePage } from './features/home/HomePage';
 import { Orb } from './features/orb/Orb';
@@ -16,6 +17,7 @@ type Route =
   | { page: 'execution'; intentId: string; runId: string };
 
 export function App() {
+  useBootSession();
   const { init, getClient } = useConnectionStore();
   const initialShouldShowBoot = useRef(shouldShowBoot(window.location.search)).current;
   const [booted, setBooted] = useState(() => !initialShouldShowBoot);

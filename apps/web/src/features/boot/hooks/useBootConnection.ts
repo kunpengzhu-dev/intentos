@@ -1,18 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react';
-import type {
-  BootCompletedPayload,
-  BootFailedPayload,
-  BootStartAckPayload,
-  BootStepUpdatedPayload,
-  Envelope,
-} from '@intentos/protocol';
+import { useMemo } from 'react';
 import { useBootStore } from '../../../store/boot';
 import { useConnectionStore } from '../../../store/connection';
 
 export function useBootConnection() {
-  const { phase, checks, progress, failureReason, setPhase, startBoot, updateCheck, failBoot, reset } = useBootStore();
-  const { getClient, state } = useConnectionStore();
-  const bootSent = useRef(false);
+  const { phase, checks, progress, failureReason } = useBootStore();
+  const { state } = useConnectionStore();
 
   const failureText = useMemo(() => {
     const failedCheck = checks.find((check) => check.state === 'failed');
@@ -31,45 +23,6 @@ export function useBootConnection() {
 
     return undefined;
   }, [checks]);
-
-  useEffect(() => {
-    if (state !== 'connected' || bootSent.current) return;
-    bootSent.current = true;
-
-    const client = getClient();
-
-    const offStepUpdated = client.on('boot/step.updated', (env: Envelope) => {
-      updateCheck(env.payload as BootStepUpdatedPayload);
-    });
-
-    const offCompleted = client.on('boot/completed', (env: Envelope) => {
-      void (env.payload as BootCompletedPayload);
-      setPhase('ready');
-    });
-
-    const offFailed = client.on('boot/failed', (env: Envelope) => {
-      const payload = env.payload as BootFailedPayload;
-      const reason = payload.stepId
-        ? `[${payload.stepId}] ${payload.reason}`
-        : payload.reason;
-      failBoot(reason);
-    });
-
-    client.send('boot/start', {}).then((env) => {
-      startBoot(env.payload as BootStartAckPayload);
-    }).catch((error: unknown) => {
-      const reason = error instanceof Error ? error.message : 'boot/start request failed';
-      failBoot(reason);
-    });
-
-    return () => {
-      offStepUpdated();
-      offCompleted();
-      offFailed();
-      bootSent.current = false;
-      reset();
-    };
-  }, [failBoot, getClient, reset, setPhase, startBoot, state, updateCheck]);
 
   return {
     phase,
