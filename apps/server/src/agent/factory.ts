@@ -1,4 +1,4 @@
-import { OpenClawClient } from '@intentos/adapter-openclaw';
+import { OpenClawClient } from '../adapters/openclaw/client.js';
 import { env } from '../config/env.js';
 import type { AgentAdapter } from './types.js';
 

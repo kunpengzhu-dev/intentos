@@ -3,13 +3,13 @@ name: IntentOS Architecture Plan
 overview: 基于用户与 AI 讨论的 AIOS 架构方案，进行评审优化后输出可落地的项目架构设计，包含分层架构、目录结构、协议设计、技术选型和实现里程碑。
 todos:
   - id: scaffold
-    content: 搭建 Monorepo 脚手架：pnpm workspace + Turborepo + 7 个包的空壳 + 构建/lint/prettier 配置
+    content: 搭建 Monorepo 脚手架：pnpm workspace + Turborepo + 6 个工作区（3 shared packages + 3 apps）的空壳 + 构建/lint/prettier 配置
     status: pending
   - id: protocol
     content: 实现 packages/protocol：Envelope（含 kind/debugActor?/scopeId/clientId/streamId/serverSeq/clientSeq/traceId/reqId）、事件类型（intent/* + run/* + stream/* 分离）、EVENT_META（replayable/stream/since）、assertEnvelope() 校验（连接方向+kind 硬校验）、STREAM_ID_PATTERN 格式校验、Cursor 类型（紧凑数组+版本）、DTO 全集、as const 常量
     status: pending
-  - id: core
-    content: 实现 packages/core：Intent/Run 状态机、deriveIntentSummary() + deriveRunStatus() 投影函数（各自只消费一个 stream，不跨 stream 合并，seq 不连续返回 desynced）、canCancel()/canRetry() 校验器、状态转换规则
+  - id: runtime-core
+    content: 在 apps/server 内实现 Intent/Run 状态机、deriveIntentSummary() + deriveRunStatus() 投影函数（各自只消费一个 stream，不跨 stream 合并，seq 不连续返回 desynced）、canCancel()/canRetry() 校验器、状态转换规则
     status: pending
   - id: ui-package
     content: 实现 packages/ui：design tokens（颜色/间距/字体/阴影/动画/motion）+ tokens.json 双格式 + subpath export + 共享 hooks + 基于 shadcn 的业务组件
@@ -79,7 +79,7 @@ graph TB
 
     subgraph runtimeLayer ["Intent Runtime"]
         IntentService["Intent Service"]
-        StateMachine["State Machine (from core)"]
+        StateMachine["State Machine (from server runtime)"]
         ApprovalQueue["Approval Queue"]
         ChatService["Chat Service"]
     end
@@ -88,7 +88,7 @@ graph TB
         SQLite["SQLite + Drizzle ORM"]
     end
 
-    subgraph bridgeLayer ["OpenClaw Bridge (adapters/openclaw)"]
+    subgraph bridgeLayer ["OpenClaw Bridge (apps/server/src/adapters/openclaw)"]
         OpenClawClient["OpenClaw Client"]
         EventMapper["Event Mapper"]
     end
@@ -112,11 +112,10 @@ graph TB
 
 - **Frontend Layer**: 纯 UI 渲染 + 用户交互，不包含业务逻辑，通过 SDK 与 BFF 通信
 - **packages/protocol**: 共享契约 — 类型、`as const` 常量、纯函数（validate/parse/guard）。被所有其他包消费。
-- **packages/core**: 纯领域逻辑 — 状态机、转换规则、校验函数、`deriveIntentSummary()` + `deriveRunStatus()` 投影函数（各自只消费一个 stream）。纯计算无 IO。被 web 和 server 共同消费。
 - **packages/sdk**: 封装 WebSocket 连接管理、断线重连、事件订阅，提供类型安全的 API。只依赖 protocol，不依赖 React。
 - **packages/ui**: 设计系统 — tokens 提供跨端一致的设计变量（平台无关纯数据），hooks 提供共享的 React 逻辑，components 提供基于 shadcn 二次封装的业务组件
-- **packages/adapters/openclaw**: 可替换的 agent 适配器，只依赖 protocol，不依赖 server 内部逻辑
-- **BFF Gateway (apps/server)**: 面向 UI 的网关，管理会话、根据 contextId 预取上下文数据附加到消息、协议转换、事件映射。不做消息分类或 agent 路由。消费 core + adapters + protocol。
+- **apps/server/src/adapters/openclaw**: server 内置 OpenClaw 适配层，承接网关桥接和事件映射
+- **BFF Gateway (apps/server)**: 面向 UI 的网关，管理会话、根据 contextId 预取上下文数据附加到消息、协议转换、事件映射。不做消息分类或 agent 路由。消费 protocol + server runtime + server 内置 openclaw adapter。
 - **Persistence**: SQLite 存储意图状态、聊天记录、审批记录，确保刷新不丢失
 
 ### 包的边界规则
@@ -124,34 +123,27 @@ graph TB
 每个包都有明确的"能依赖什么"和"不能依赖什么"的约束：
 
 - `protocol`: 不依赖任何内部包，不依赖 Node/React/任何框架。只导出类型（type/interface/enum）、`as const` 常量、以及纯函数（无副作用、无 IO，仅用于 validate/parse/guard，如 `parseEnvelope()`、`isEventType()`）。禁止导出业务逻辑函数。
-- `core`: 依赖 protocol（允许 import 常量和类型，不限于 `import type`）。约束是"纯计算、无 IO"：禁止依赖 ws/express/fastify/fs/process/fetch 等运行时 IO。
 - `sdk`: 只依赖 protocol。不依赖 React（纯 TS，浏览器 WebSocket 环境）。
 - `ui`: 依赖 protocol。通过 package.json subpath exports 分离：`@intentos/ui/tokens`（平台无关纯数据，不依赖 React）和 `@intentos/ui/react`（hooks + 组件，依赖 React）。
-- `adapters/openclaw`: 只依赖 protocol。不依赖 server 内部模块。
-- `apps/web`: 消费 protocol + core + sdk + ui。
-- `apps/server`: 消费 protocol + core + adapters/openclaw。
+- `apps/web`: 消费 protocol + sdk + ui。
+- `apps/server`: 消费 protocol，并在 app 内部实现 runtime + openclaw adapter。
 
 ### 包间依赖关系
 
 ```mermaid
 graph TD
     protocol["packages/protocol\n(纯类型：接口/枚举/常量)"]
-    core["packages/core\n(纯逻辑：状态机/校验/规则)"]
     sdk["packages/sdk\n(WS 客户端：连接/重连/订阅)"]
     ui["packages/ui\n(设计系统：tokens/hooks/组件)"]
-    adapter["packages/adapters/openclaw\n(可替换的 agent 适配器)"]
+    adapter["apps/server/src/adapters/openclaw\n(OpenClaw 适配层)"]
     web["apps/web\n(React 前端应用)"]
     server["apps/server\n(Fastify BFF + Runtime)"]
 
-    core --> protocol
     sdk --> protocol
     ui --> protocol
-    adapter --> protocol
     web --> sdk
     web --> ui
-    web --> core
     web --> protocol
-    server --> core
     server --> adapter
     server --> protocol
 ```
@@ -167,7 +159,7 @@ graph TD
 - BFF 不做分类但必须做安全策略门（auth/risk 类审批强制用户确认）
 - UI 最终状态只能由 EVT [R] 事件推导，NOTIFY [E] 只是体验增强
 - 前后端通过 `packages/protocol` 共享所有类型定义和 EVENT_META，编译期保证类型安全
-- 前后端通过 `packages/core` 共享意图状态机逻辑，core 投影函数只接受 [R] 事件
+- 意图状态机与投影逻辑由 `apps/server` runtime 统一维护，投影函数只接受 [R] 事件
 
 ---
 
@@ -245,24 +237,6 @@ intentos/
       package.json
       tsconfig.json
 
-    core/                        # 纯领域逻辑（纯计算、无 IO）
-      src/
-        intent/
-          state-machine.ts       # Intent 状态转换逻辑
-          projections.ts         # deriveIntentSummary(globalEvents[]) + deriveRunStatus(runEvents[]) — 各自只消费一个 stream，不跨 stream 合并
-          transitions.ts         # 合法状态转换规则
-          validators.ts          # canCancel(), canRetry() 等业务校验
-          index.ts
-        run/
-          state-machine.ts       # IntentRun 状态转换逻辑
-          index.ts
-        approval/
-          validators.ts          # 审批决策校验
-          index.ts
-        index.ts
-      package.json
-      tsconfig.json
-
     sdk/                         # 前端 WS 客户端 SDK
       src/
         client.ts                # AIOSClient 类
@@ -306,16 +280,6 @@ intentos/
           index.ts
       package.json               # exports: { "./tokens": ..., "./react": ... }
       tsconfig.json
-
-    adapters/
-      openclaw/                  # OpenClaw 适配器
-        src/
-          client.ts              # OpenClaw API 客户端
-          event-mapper.ts        # OpenClaw 事件 -> 标准事件
-          tool-mapper.ts         # 工具调用映射
-          index.ts
-        package.json
-        tsconfig.json
 
   apps/
     web/                         # React Web 前端
@@ -409,8 +373,12 @@ intentos/
           service.ts             # 推荐意图服务
         boot/
           checker.ts             # 环境检查器
-        bridge/
-          openclaw.ts            # 调用 adapters/openclaw
+        adapters/
+          openclaw/
+            client.ts            # OpenClaw API 客户端
+            gateway-chat.ts      # 网关 websocket chat bridge
+            policy-gate.ts       # policy gate（server 内置）
+            types.ts
         db/
           schema.ts              # Drizzle schema（intent/run/event/approval/artifact/stream_head/idempotency/intent_summary 表）
           migrations/
@@ -621,7 +589,7 @@ type IntentSuggestionDTO = {
 **核心约束（可测试）：**
 
 - **UI 的最终状态只能由 EVT [R] 事件推导。** NOTIFY [E] 事件只能更新"体验层 overlay"（进度条、动画），永远不写入状态 store。
-- **投影函数不跨 stream 合并。** core 提供两个独立投影函数，各自只消费一个 stream：
+- **投影函数不跨 stream 合并。** server runtime 提供两个独立投影函数，各自只消费一个 stream：
   - `deriveIntentSummary(globalEvents[])` — 首页用，只接受 global stream 的 [R] 事件
   - `deriveRunStatus(runEvents[])` — 执行页用，只接受单个 run stream 的 [R] 事件
   - UI 层决定展示哪个：首页展示 intent summary，执行页展示 run status
@@ -831,7 +799,7 @@ IntentRun 有独立的状态流转（queued -> running -> waiting_for_user -> co
 - 如果 seq 不连续（缺事件），返回 `status: 'desynced'` 异常态，UI 显示"状态同步中..."
 - **desynced 是暂时态**：SDK 检测到 gap 后自动触发重订阅补偿，补齐后投影函数重新计算，自动恢复正常状态
 
-配套的校验函数同样在 core 中：`canCancel(runStatus)`, `canRetry(intentStatus, latestRun)`。
+配套的校验函数同样在 server runtime 中：`canCancel(runStatus)`, `canRetry(intentStatus, latestRun)`。
 
 ### 4.5 AI 小球与 OpenClaw 对接模式
 
@@ -913,7 +881,7 @@ BFF 不做**业务意图**分类或 agent 路由；但 BFF 是**协议与安全�
 
 - **`run/needs_approval` EVT 只能由 server 产出**，agent 只能"建议"（发送内部 signal，如 tool-call 请求）
 - server 根据策略表判断是否需要用户审批，命中后产出 `run/needs_approval` 事实事件
-- **adapters/openclaw 产生的任何"工具执行结果"不能直接变成 [R] 事件**——必须经过 server 的 policy gate：
+- **apps/server/src/adapters/openclaw 产生的任何"工具执行结果"不能直接变成 [R] 事件**——必须经过 server 的 policy gate：
   - gate 根据 tool 名称/参数/风险级别/是否已有对应 `run/approval_recorded` 做校验
   - gate 通过 → 允许产出 `run/step_upserted`、`run/completed` 等 [R] 事件
   - gate 未通过 → 只能产出 `run/needs_approval` [R] + 可选 NOTIFY 提示，禁止写入任何推进状态的 [R] 事件
@@ -962,7 +930,7 @@ BFF 不做**业务意图**分类或 agent 路由；但 BFF 是**协议与安全�
 
 - Server 搭建：Fastify + WebSocket + SQLite + auth handshake（匿名模式）
 - Protocol 包：Envelope（kind/debugActor?/scopeId）、事件类型（intent/* + run/* + stream/*）、EVENT_META（replayable/stream/since）、assertEnvelope()（连接方向+kind 硬校验）、STREAM_ID_PATTERN、Cursor（紧凑数组）
-- Core 包：deriveIntentSummary() + deriveRunStatus()（各自一个 stream，不跨 stream）+ canCancel/canRetry + Intent/Run 状态机
+- Server runtime 核心模块：deriveIntentSummary() + deriveRunStatus()（各自一个 stream，不跨 stream）+ canCancel/canRetry + Intent/Run 状态机
 - SDK 包：WebSocket 客户端 + 断线重连 + cursor 重放 + seq gap 自动恢复（只对 kind=evt 生效）+ ACK 处理（含 clientSeq 回传对账）
 - Event store：双层 stream + EVENT_META 校验 + stream_head 表（serverSeq 事务内持久化，重启不回退）
 - 幂等去重：(scopeId, clientId, reqId) 主键（存 ackPayload + payloadHash，mismatch 拒绝）
@@ -975,7 +943,7 @@ BFF 不做**业务意图**分类或 agent 路由；但 BFF 是**协议与安全�
 
 **MVP 3 - 对接 OpenClaw（第 5-6 周）**
 
-- adapters/openclaw 实现：事件映射、工具映射
+- apps/server/src/adapters/openclaw 实现：事件映射、工具映射
 - Intent Runtime 状态机跑通真实任务
 - 审批流程 `run/needs_approval` -> 用户决策 -> `run/approval_recorded` -> 继续执行
 - 执行页详细交互（Timeline、日志、Artifact 展示）

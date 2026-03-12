@@ -11,6 +11,7 @@ export type PolicyCheckResult = {
  * All tool execution results from OpenClaw must pass through this gate.
  */
 export function checkPolicy(result: AgentResult, _approvedActions: Set<string>): PolicyCheckResult {
+  void _approvedActions;
   if (!result.success) {
     return { allowed: true };
   }

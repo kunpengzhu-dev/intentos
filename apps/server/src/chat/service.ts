@@ -1,5 +1,8 @@
 import { dirname, join } from 'path';
-import { fetchOpenClawGatewayHistory, streamOpenClawGatewayChat } from '@intentos/adapter-openclaw';
+import {
+  fetchOpenClawGatewayHistory,
+  streamOpenClawGatewayChat,
+} from '../adapters/openclaw/gateway-chat.js';
 import type { WsSession } from '../ws/server.js';
 import type { Env } from '../config/env.js';
 import { logger } from '../config/logger.js';

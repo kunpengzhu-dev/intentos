@@ -15,8 +15,6 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/websocket": "^11.2.0",
-    "@intentos/adapter-openclaw": "workspace:*",
-    "@intentos/core": "workspace:*",
     "@intentos/protocol": "workspace:*",
     "fastify": "^5.7.4",
     "nanoid": "^5.1.6",

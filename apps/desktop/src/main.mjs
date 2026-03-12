@@ -47,16 +47,13 @@ function writeStartupErrorLog(error) {
 
 function createStartupErrorWindow(error, logPath) {
   const details = stringifyError(error);
-  const nativeHint = /better-sqlite3|NODE_MODULE_VERSION|invalid ELF|wrong ELF|module did not self-register/i.test(details)
-    ? '\n\nHint: this often means a native addon ABI mismatch (for example better-sqlite3 not built for HarmonyOS Electron).'
-    : '';
   const html = `<!doctype html>
 <html>
   <head><meta charset="utf-8"><title>Startup Failed</title></head>
   <body style="font-family: sans-serif; padding: 16px; background: #0b1020; color: #e5e7eb;">
     <h2>IntentOS failed to start</h2>
     <p>Log file: <code>${escapeHtml(logPath)}</code></p>
-    <pre style="white-space: pre-wrap; background: #111827; padding: 12px; border-radius: 8px;">${escapeHtml(details + nativeHint)}</pre>
+    <pre style="white-space: pre-wrap; background: #111827; padding: 12px; border-radius: 8px;">${escapeHtml(details)}</pre>
   </body>
 </html>`;
 

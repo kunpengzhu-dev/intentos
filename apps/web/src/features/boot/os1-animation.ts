@@ -44,7 +44,7 @@ export function createOs1Animation(
   scene.add(group);
 
   class CustomCurve extends THREE.Curve<THREE.Vector3> {
-    override getPoint(t: number, target = new THREE.Vector3()) {
+    getPoint(t: number, target = new THREE.Vector3()) {
       const x = length * Math.sin(pi2 * t);
       const y = radius * Math.cos(pi2 * 3 * t);
       let tt = (t % 0.25) / 0.25;

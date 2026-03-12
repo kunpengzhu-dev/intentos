@@ -6,19 +6,16 @@ An intent-driven AI operating system that bridges human intent and AI execution.
 
 ## Architecture
 
-IntentOS is a monorepo with 7 packages:
+IntentOS is a monorepo with 3 shared packages and 3 apps:
 
 ```
 packages/
   protocol/     — Shared types, Envelope, EVENT_META, DTOs (pure types + constants)
-  core/         — Domain logic: state machines, transitions, projections (no IO)
   sdk/          — Browser WebSocket client with reconnect, seq tracking, cursor
   ui/           — Design system tokens + React hooks
-  adapters/
-    openclaw/   — OpenClaw agent adapter with policy gate
 apps/
   web/          — React + Vite frontend (Boot, Home, Execution pages, AI Orb)
-  server/       — Fastify BFF + WebSocket + SQLite event store
+  server/       — Fastify BFF + WebSocket + SQLite event store + OpenClaw bridge
   desktop/      — Electron shell that hosts the web app
 ```
 

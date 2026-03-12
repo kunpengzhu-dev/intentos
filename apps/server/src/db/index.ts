@@ -193,9 +193,13 @@ class InMemorySqlite implements SqliteLike {
   private readonly idempotency = new Map<string, IdempotencyRow>();
   private readonly intentSummary = new Map<string, IntentSummaryRow>();
 
-  pragma(_command: string): void {}
+  pragma(_command: string): void {
+    void _command;
+  }
 
-  exec(_sql: string): void {}
+  exec(_sql: string): void {
+    void _sql;
+  }
 
   transaction<T>(fn: () => T): (() => T) & { immediate: () => T } {
     const runner = (() => fn()) as (() => T) & { immediate: () => T };
