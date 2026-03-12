@@ -47,7 +47,7 @@ async function createServerApp(): Promise<FastifyInstance> {
   const ctx: AppContext = { database, bootService, agentAdapter, chatService, handleMessage: handler };
 
   registerHealthRoutes(app);
-  registerBootRoutes(app, bootService);
+  registerBootRoutes(app, bootService, chatService);
   registerArtifactRoutes(app, database);
   registerDebugRoutes(app, database);
   registerWebSocket(app, ctx);

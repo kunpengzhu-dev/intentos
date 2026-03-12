@@ -158,6 +158,10 @@ export class BootService {
     return this.emitFailed(session, payload);
   }
 
+  hasActiveCallbackToken(callbackToken: string): boolean {
+    return this.activeBootsByToken.has(callbackToken);
+  }
+
   private sendStartAck(
     session: WsSession,
     reqId: string | undefined,

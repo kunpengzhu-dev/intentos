@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { BootService } from '../boot/service.js';
+import type { ChatService } from '../chat/service.js';
 
 const stepsBodySchema = z.object({
   steps: z.array(z.object({
@@ -28,6 +29,14 @@ const failedBodySchema = z.object({
   failedAt: z.string().min(1),
 });
 
+const openclawGatewayBodySchema = z.object({
+  url: z.string().url(),
+  token: z.string().min(1),
+  connectionPlatform: z.string().min(1),
+  source: z.enum(['env', 'auto']).default('auto'),
+  updatedAt: z.string().min(1).optional(),
+});
+
 function getBearerToken(authorization?: string): string | null {
   if (!authorization) {
     return null;
@@ -40,7 +49,27 @@ function getBearerToken(authorization?: string): string | null {
   return token;
 }
 
-export function registerBootRoutes(app: FastifyInstance, bootService: BootService) {
+export function registerBootRoutes(app: FastifyInstance, bootService: BootService, chatService: ChatService) {
+  app.post('/internal/boot/openclaw-gateway', async (req, reply) => {
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      return reply.code(401).send({ accepted: false, reason: 'MISSING_BOOT_TOKEN' });
+    }
+    if (!bootService.hasActiveCallbackToken(token)) {
+      return reply.code(404).send({ accepted: false });
+    }
+
+    const payload = openclawGatewayBodySchema.parse(req.body);
+    chatService.configureGateway({
+      url: payload.url,
+      token: payload.token,
+      connectionPlatform: payload.connectionPlatform,
+      source: payload.source,
+      updatedAt: payload.updatedAt ?? new Date().toISOString(),
+    });
+    return reply.code(202).send({ accepted: true });
+  });
+
   app.post('/internal/boot/steps', async (req, reply) => {
     const token = getBearerToken(req.headers.authorization);
     if (!token) {
