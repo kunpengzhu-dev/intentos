@@ -11,7 +11,7 @@ export function BootPage({
   onReady: () => void;
   onOrbTransitionChange: (next: Partial<OrbTransitionState>) => void;
 }) {
-  const { phase, progress, state, failureText } = useBootConnection();
+  const { phase, progress, state, failureText, currentStepLabel } = useBootConnection();
   const wrapRef = useRef<HTMLDivElement>(null);
   const effectiveProgress = phase === 'ready' ? 1 : progress;
   const { transitionState } = useOs1Animation({
@@ -30,7 +30,12 @@ export function BootPage({
     onOrbTransitionChange,
   });
   const percentageLabel = `${(effectiveProgress * 100).toFixed(1)}%`;
-  const loadingLabel = phase === 'failed' ? 'Failed' : effectiveProgress >= 1 ? 'Ready' : 'Loading';
+  const loadingLabel =
+    phase === 'failed'
+      ? currentStepLabel ? `${currentStepLabel} failed` : 'Failed'
+      : effectiveProgress >= 1
+        ? 'Ready'
+        : currentStepLabel ?? 'Loading';
 
   return (
     <div className="os1-container">

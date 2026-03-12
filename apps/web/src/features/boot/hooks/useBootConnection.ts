@@ -19,6 +19,19 @@ export function useBootConnection() {
     return failedCheck?.error ?? failureReason ?? 'Startup checks failed. Please inspect the failed subsystem and retry.';
   }, [checks, failureReason]);
 
+  const currentStepLabel = useMemo(() => {
+    const runningCheck = checks.find((check) => check.state === 'running');
+    if (runningCheck) return runningCheck.label;
+
+    const pendingCheck = checks.find((check) => check.state === 'pending');
+    if (pendingCheck) return pendingCheck.label;
+
+    const failedCheck = checks.find((check) => check.state === 'failed');
+    if (failedCheck) return failedCheck.label;
+
+    return undefined;
+  }, [checks]);
+
   useEffect(() => {
     if (state !== 'connected' || bootSent.current) return;
     bootSent.current = true;
@@ -63,5 +76,6 @@ export function useBootConnection() {
     progress,
     state,
     failureText,
+    currentStepLabel,
   };
 }
