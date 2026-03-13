@@ -21,6 +21,7 @@ type StreamAssistantReplyOptions = {
   session: WsSession;
   message: string;
   contextId: string;
+  runId?: string;
   onDelta: (delta: string) => void;
   onFinal: (finalText: string) => void;
   onHistory?: (historyPayload: unknown) => void;
@@ -121,6 +122,7 @@ export class ChatService {
         origin: options.session.clientOrigin,
         sessionKey,
         message: options.message,
+        runId: options.runId,
         identityFilePath: this.identityFilePath,
         onDelta: options.onDelta,
         onFinal: options.onFinal,

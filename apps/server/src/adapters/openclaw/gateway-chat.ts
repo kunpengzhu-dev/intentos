@@ -19,6 +19,7 @@ type StreamChatOptions = {
   origin?: string;
   sessionKey: string;
   message: string;
+  runId?: string;
   identityFilePath: string;
   onDelta: (delta: string) => void;
   onFinal: (finalText: string) => void;
@@ -208,17 +209,6 @@ function extractFinalTextFromChatPayload(payload: Record<string, unknown>): stri
   return stringifyPayload(payload);
 }
 
-function extractAssistantTextFromAgentPayload(payload: Record<string, unknown>): string {
-  const stream = typeof payload.stream === 'string' ? payload.stream : '';
-  if (stream !== 'assistant') return '';
-  const data = payload.data;
-  if (!data || typeof data !== 'object') return '';
-  const dataObj = data as Record<string, unknown>;
-  if (typeof dataObj.text === 'string') return dataObj.text;
-  if (typeof dataObj.delta === 'string') return dataObj.delta;
-  return '';
-}
-
 export async function streamOpenClawGatewayChat(options: StreamChatOptions): Promise<void> {
   const identity = await loadOrCreateDeviceIdentity(options.identityFilePath);
   const timeoutMs = options.timeoutMs;
@@ -243,7 +233,6 @@ export async function streamOpenClawGatewayChat(options: StreamChatOptions): Pro
     let historySyncedForThisTurn = false;
     let historyReadyForThisTurn = false;
     let bufferedLatestText = '';
-    let hasAgentAssistantStream = false;
 
     const closeAndFinish = (error?: Error) => {
       if (closed) return;
@@ -383,7 +372,7 @@ export async function streamOpenClawGatewayChat(options: StreamChatOptions): Pro
         sessionKey: options.sessionKey,
         message: options.message,
         deliver: false,
-        idempotencyKey: randomUUID(),
+        idempotencyKey: options.runId ?? randomUUID(),
       };
       await sendReq('chat.send', chatSendBaseParams);
     };
@@ -445,27 +434,12 @@ export async function streamOpenClawGatewayChat(options: StreamChatOptions): Pro
           return;
         }
 
-        if (eventName === 'agent') {
-          const payload = (data.payload ?? {}) as Record<string, unknown>;
-          const assistantText = extractAssistantTextFromAgentPayload(payload);
-          if (!assistantText) {
-            return;
-          }
-          hasAgentAssistantStream = true;
-          emitAssistantText(assistantText);
-          if (!historySyncedForThisTurn) {
-            historySyncedForThisTurn = true;
-            void ensureHistorySynced();
-          }
-          return;
-        }
-
         if (eventName === 'chat') {
           const payload = (data.payload ?? {}) as Record<string, unknown>;
           const state = payload.state as string;
           if (state === 'delta') {
             const deltaText = extractTextFromMessage(payload.message);
-            if (deltaText && !hasAgentAssistantStream) {
+            if (deltaText) {
               emitAssistantText(deltaText);
             }
             if (!historySyncedForThisTurn) {

@@ -7,6 +7,7 @@ export type ChatDeltaPayload = {
   delta: string;
   done: boolean;
   contextId: string;
+  runId?: string;
 };
 
 export type ChatHistoryPayload = {

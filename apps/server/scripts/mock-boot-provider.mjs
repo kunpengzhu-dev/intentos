@@ -38,6 +38,8 @@ function readNonEmptyEnv(name) {
   return value.trim();
 }
 
+const OPENCLAW_CONFIG_FILENAME = 'openclaw.json';
+
 function parseGatewayConfig(raw, configPath) {
   const parsed = JSON.parse(raw);
   if (!isRecord(parsed)) {
@@ -68,20 +70,21 @@ function resolveStateDir(homeDir) {
   return path.join(homeDir, '.openclaw');
 }
 
-function readOpenclawGatewayDefaults(homeDir, urlBuilder, sourceLabel) {
-  const configPath = path.join(resolveStateDir(homeDir), 'openclaw.json');
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`OpenClaw config not found: ${sourceLabel}:${configPath}`);
+function readOpenclawGatewayDefaults(homeDir, urlBuilder) {
+  try {
+    const configPath = path.join(resolveStateDir(homeDir), OPENCLAW_CONFIG_FILENAME);
+    if (!fs.existsSync(configPath)) return null;
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const parsed = parseGatewayConfig(raw, configPath);
+    return {
+      url: urlBuilder(parsed.port),
+      token: parsed.token,
+      port: parsed.port,
+      configPath,
+    };
+  } catch {
+    return null;
   }
-
-  const raw = fs.readFileSync(configPath, 'utf8');
-  const parsed = parseGatewayConfig(raw, configPath);
-  return {
-    url: urlBuilder(parsed.port),
-    token: parsed.token,
-    port: parsed.port,
-    configPath,
-  };
 }
 
 function runCommand(command, args, options = {}) {
@@ -163,6 +166,21 @@ function readWslOpenclawGatewayDefaults() {
   };
 }
 
+function isWslRuntime() {
+  if (process.platform !== 'linux') {
+    return false;
+  }
+  if (readNonEmptyEnv('WSL_DISTRO_NAME') || readNonEmptyEnv('WSL_INTEROP')) {
+    return true;
+  }
+  try {
+    const procVersion = fs.readFileSync('/proc/version', 'utf8');
+    return /microsoft/i.test(procVersion);
+  } catch {
+    return false;
+  }
+}
+
 function inferPlatformFromUrl(url, runtimePlatform) {
   try {
     const parsed = new URL(url);
@@ -170,14 +188,18 @@ function inferPlatformFromUrl(url, runtimePlatform) {
     if (host === 'localhost' || host === '127.0.0.1') {
       if (runtimePlatform === 'darwin') return 'local:mac';
       if (runtimePlatform === 'win32') return 'local:windows';
-      return 'remote:linux';
+      if (runtimePlatform === 'linux' && isWslRuntime()) return 'local:windwos(wsl)';
+      return 'local:linux';
     }
     if (host === '::1') {
-      return runtimePlatform === 'win32' ? 'local:windows(wsl)' : 'remote:linux';
+      if (runtimePlatform === 'win32' || (runtimePlatform === 'linux' && isWslRuntime())) {
+        return 'local:windwos(wsl)';
+      }
+      return 'local:linux';
     }
-    return 'remote:linux';
+    return 'remote';
   } catch {
-    return 'remote:linux';
+    return 'remote';
   }
 }
 
@@ -210,7 +232,10 @@ function resolveGatewayForMac() {
     throw new Error('OpenClaw is not installed on macOS. TODO: run automatic installer script.');
   }
 
-  const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`, 'local');
+  const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`);
+  if (!resolved) {
+    throw new Error(`OpenClaw config not found: ${path.join(resolveStateDir(os.homedir()), OPENCLAW_CONFIG_FILENAME)}`);
+  }
   return {
     url: resolved.url,
     token: resolved.token,
@@ -225,11 +250,14 @@ function resolveGatewayForLinux() {
     throw new Error('OpenClaw is not installed on Linux. TODO: run automatic installer script.');
   }
 
-  const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`, 'local');
+  const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`);
+  if (!resolved) {
+    throw new Error(`OpenClaw config not found: ${path.join(resolveStateDir(os.homedir()), OPENCLAW_CONFIG_FILENAME)}`);
+  }
   return {
     url: resolved.url,
     token: resolved.token,
-    connectionPlatform: 'remote:linux',
+    connectionPlatform: isWslRuntime() ? 'local:windwos(wsl)' : 'local:linux',
     source: 'auto',
     detail: `resolved from ${resolved.configPath}`,
   };
@@ -248,7 +276,10 @@ function resolveGatewayForWindows() {
   }
 
   if (windowsHasOpenclaw) {
-    const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`, 'local');
+    const resolved = readOpenclawGatewayDefaults(os.homedir(), (port) => `ws://localhost:${port}`);
+    if (!resolved) {
+      throw new Error(`OpenClaw config not found: ${path.join(resolveStateDir(os.homedir()), OPENCLAW_CONFIG_FILENAME)}`);
+    }
     return {
       url: resolved.url,
       token: resolved.token,
@@ -262,7 +293,7 @@ function resolveGatewayForWindows() {
   return {
     url: resolved.url,
     token: resolved.token,
-    connectionPlatform: 'local:windows(wsl)',
+    connectionPlatform: 'local:windwos(wsl)',
     source: 'auto',
     detail: `resolved from ${resolved.configPath}`,
   };
@@ -276,7 +307,7 @@ function detectRuntimePlatform() {
       resolve: resolveGatewayForMac,
     },
     linux: {
-      label: 'Linux',
+      label: isWslRuntime() ? 'Windows (WSL)' : 'Linux',
       resolve: resolveGatewayForLinux,
     },
     win32: {

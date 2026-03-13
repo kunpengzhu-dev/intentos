@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, useMotionValue } from 'framer-motion';
-import type { ChatHistoryEntry, ChatHistoryOkPayload, ChatHistorySyncPayload } from '@intentos/protocol';
+import type {
+  ChatDeltaPayload,
+  ChatHistoryEntry,
+  ChatHistoryOkPayload,
+  ChatHistorySyncPayload,
+} from '@intentos/protocol';
 import { useBootStore } from '../../store/boot';
 import { useChatStore } from '../../store/chat';
 import { useConnectionStore } from '../../store/connection';
@@ -144,8 +149,8 @@ export function Orb({ transition }: { transition: OrbTransitionState }) {
     if (state !== 'connected') return;
     const client = getClient();
     const offDelta = client.on('chat/delta', (env) => {
-      const payload = env.payload as { delta: string; done: boolean };
-      applyAssistantDelta(payload.delta, payload.done, env.id, env.ts);
+      const payload = env.payload as ChatDeltaPayload;
+      applyAssistantDelta(payload.delta, payload.done, env.id, env.ts, payload.runId);
     });
     const offHistory = client.on('chat/history_sync', (env) => {
       const payload = env.payload as ChatHistorySyncPayload;

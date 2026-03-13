@@ -6,6 +6,7 @@ export type ChatBubble = {
   content: string;
   ts: number;
   streaming?: boolean;
+  runId?: string;
 };
 
 type ChatStore = {
@@ -13,7 +14,13 @@ type ChatStore = {
   isStreaming: boolean;
   addMessage: (msg: ChatBubble) => void;
   upsertMessages: (msgs: ChatBubble[]) => void;
-  applyAssistantDelta: (delta: string, done: boolean, envelopeId: string, ts: number) => void;
+  applyAssistantDelta: (
+    delta: string,
+    done: boolean,
+    envelopeId: string,
+    ts: number,
+    runId?: string,
+  ) => void;
   updateLastAssistant: (delta: string, done: boolean) => void;
   setStreaming: (v: boolean) => void;
   clear: () => void;
@@ -62,6 +69,21 @@ function mergeAssistantContent(current: string, delta: string): string {
   if (current.startsWith(delta)) return current;
   if (current.endsWith(delta)) return current;
   return current + delta;
+}
+
+function resolveStreamContent(current: string, delta: string, done: boolean): string {
+  if (!delta) return current;
+  // Final payload is authoritative full text from gateway.
+  if (done) return delta;
+  if (!current) return delta;
+
+  // Prefer snapshot-style deltas (OpenClaw chat events usually send full current text).
+  if (delta.startsWith(current)) return delta;
+  if (current.startsWith(delta)) return current;
+  if (delta.length >= current.length) return delta;
+
+  // Fallback for incremental token-style chunks.
+  return mergeAssistantContent(current, delta);
 }
 
 function findMergeTargetId(existing: Map<string, ChatBubble>, incoming: ChatBubble): string | null {
@@ -161,64 +183,44 @@ export const useChatStore = create<ChatStore>((set) => ({
         messages: [...merged.values()].sort((a, b) => a.ts - b.ts),
       };
     }),
-  applyAssistantDelta: (delta, done, envelopeId, ts) =>
+  applyAssistantDelta: (delta, done, envelopeId, ts, runId) =>
     set((s) => {
       const msgs = [...s.messages];
-      let streamingIndex = -1;
+      let targetIndex = -1;
+
       for (let i = msgs.length - 1; i >= 0; i -= 1) {
-        if (msgs[i].role === 'assistant' && msgs[i].streaming) {
-          streamingIndex = i;
-          break;
-        }
+        if (msgs[i].role !== 'assistant' || !msgs[i].streaming) continue;
+        if (runId && msgs[i].runId && msgs[i].runId !== runId) continue;
+        targetIndex = i;
+        break;
       }
 
-      if (streamingIndex === -1) {
+      if (targetIndex === -1) {
         if (!delta && done) {
-          return { isStreaming: false };
-        }
-        // Race guard: if history sync already inserted this assistant reply,
-        // merge this delta/final into the latest assistant bubble instead of duplicating.
-        const maxRecentGapMs = 8000;
-        const deltaNormalized = normalizeTextForCompare(delta);
-        const deltaCompact = compactTextForCompare(delta);
-        for (let i = msgs.length - 1; i >= 0; i -= 1) {
-          const candidate = msgs[i];
-          if (candidate.role !== 'assistant' || candidate.streaming) continue;
-          if (Math.abs(ts - candidate.ts) > maxRecentGapMs) break;
-          const candidateNormalized = normalizeTextForCompare(candidate.content);
-          const candidateCompact = compactTextForCompare(candidate.content);
-          const related =
-            !delta ||
-            candidateNormalized === deltaNormalized ||
-            (candidateCompact.length > 0 && candidateCompact === deltaCompact) ||
-            candidate.content.startsWith(delta) ||
-            delta.startsWith(candidate.content) ||
-            (candidateCompact.length > 0 && deltaCompact.startsWith(candidateCompact)) ||
-            (deltaCompact.length > 0 && candidateCompact.startsWith(deltaCompact)) ||
-            candidate.content.endsWith(delta) ||
-            delta.endsWith(candidate.content);
-          if (!related) continue;
-          msgs[i] = {
-            ...candidate,
-            content: mergeAssistantContent(candidate.content, delta),
-            streaming: !done,
-          };
-          return { messages: msgs, isStreaming: !done };
+          const hasStreaming = msgs.some((item) => item.role === 'assistant' && item.streaming);
+          return { isStreaming: hasStreaming };
         }
         msgs.push({
-          id: envelopeId,
+          id: runId ? `run:${runId}:${envelopeId}` : envelopeId,
           role: 'assistant',
           content: delta,
           ts,
           streaming: !done,
+          runId,
         });
-        return { messages: msgs, isStreaming: !done };
+      } else {
+        const current = msgs[targetIndex];
+        const nextContent = resolveStreamContent(current.content, delta, done);
+        msgs[targetIndex] = {
+          ...current,
+          content: nextContent,
+          streaming: !done,
+          runId: runId ?? current.runId,
+        };
       }
 
-      const current = msgs[streamingIndex];
-      const nextContent = mergeAssistantContent(current.content, delta);
-      msgs[streamingIndex] = { ...current, content: nextContent, streaming: !done };
-      return { messages: msgs, isStreaming: !done };
+      const hasStreaming = msgs.some((item) => item.role === 'assistant' && item.streaming);
+      return { messages: msgs, isStreaming: hasStreaming };
     }),
   updateLastAssistant: (delta, done) =>
     set((s) => {

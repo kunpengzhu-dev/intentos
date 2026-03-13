@@ -1,5 +1,6 @@
 import type {
   Envelope,
+  ChatDeltaPayload,
   ChatHistoryEntry,
   ChatHistoryPart,
   ChatHistoryOkPayload,
@@ -282,20 +283,24 @@ export function createMessageHandler(ctx: AppContext) {
       }
 
       case 'chat/send': {
+        const runId = nanoid();
+        const contextId =
+          typeof p.contextId === 'string' && p.contextId.length > 0 ? p.contextId : 'global';
         const message = p.message as string;
         if (!message) {
+          const deltaPayload: ChatDeltaPayload = {
+            delta: '消息不能为空。',
+            done: true,
+            contextId,
+            runId,
+          };
           sendEnvelope(session.ws, {
             id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
             ts: Date.now(),
-            payload: {
-              delta: '消息不能为空。',
-              done: true,
-              contextId: p.contextId ?? 'global',
-            },
+            payload: deltaPayload,
           });
           return;
         }
-        const contextId = typeof p.contextId === 'string' && p.contextId.length > 0 ? p.contextId : 'global';
         let hasStreamedChatDelta = false;
         const seenHistorySignatures = new Set<string>();
         const chatStartTs = Date.now();
@@ -311,6 +316,7 @@ export function createMessageHandler(ctx: AppContext) {
           session,
           message,
           contextId,
+          runId,
           onDelta: (delta) => {
             if (!delta) return;
             hasStreamedChatDelta = true;
@@ -319,14 +325,16 @@ export function createMessageHandler(ctx: AppContext) {
                 `[chat-trace ${traceId}] onDelta.raw ${safeStringify(delta)}`,
               );
             }
+            const deltaPayload: ChatDeltaPayload = {
+              delta,
+              done: false,
+              contextId,
+              runId,
+            };
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
-              payload: {
-                delta,
-                done: false,
-                contextId,
-              },
+              payload: deltaPayload,
             });
           },
           onFinal: (finalText) => {
@@ -335,16 +343,18 @@ export function createMessageHandler(ctx: AppContext) {
                 `[chat-trace ${traceId}] onFinal raw=${safeStringify(finalText)}`,
               );
             }
+            const deltaPayload: ChatDeltaPayload = {
+              // Final payload always carries the complete text and is used by
+              // client to guarantee the streaming bubble ends in exact state.
+              delta: finalText,
+              done: true,
+              contextId,
+              runId,
+            };
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
-              payload: {
-                // Final payload always carries the complete text and is used by
-                // client to guarantee the streaming bubble ends in exact state.
-                delta: finalText,
-                done: true,
-                contextId,
-              },
+              payload: deltaPayload,
             });
           },
           onHistory: (historyPayload) => {
@@ -396,16 +406,18 @@ export function createMessageHandler(ctx: AppContext) {
             : undefined,
           onError: (error) => {
             logger.error({ err: error, contextId }, 'OpenClaw chat stream failed');
+            const deltaPayload: ChatDeltaPayload = {
+              delta: hasStreamedChatDelta
+                ? `\n\n[OpenClaw error] ${error.message}`
+                : `[OpenClaw error] ${error.message}`,
+              done: true,
+              contextId,
+              runId,
+            };
             sendEnvelope(session.ws, {
               id: nanoid(), version: 1, kind: 'notify', type: 'chat/delta',
               ts: Date.now(),
-              payload: {
-                delta: hasStreamedChatDelta
-                  ? `\n\n[OpenClaw error] ${error.message}`
-                  : `[OpenClaw error] ${error.message}`,
-                done: true,
-                contextId,
-              },
+              payload: deltaPayload,
             });
           },
         }).catch((error) => {
