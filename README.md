@@ -43,30 +43,15 @@ cp .env.example .env
 # Copy-Item .env.example .env
 ```
 
-You can get `OPENCLAW_GATEWAY_TOKEN` for your root `.env` from:
-
-```bash
-openclaw dashboard --no-open
-```
-
-From output like `Dashboard URL: http://127.0.0.1:18789/#token=...`, copy the value after `token=` into `.env`:
-
 Then start desktop app (will run server + web + electron together):
 
 ```bash
 pnpm dev:desktop
 ```
 
-### OpenClaw first-time pairing
+`pnpm dev:desktop` now handles OpenClaw gateway bootstrap automatically, including reading token/port defaults from local OpenClaw state and completing the initial pairing flow when required.
 
-After the first `pnpm dev:desktop`, approve the new desktop device in OpenClaw:
-
-```bash
-openclaw devices list
-openclaw devices approve <pending-request-id>
-```
-
-Use `openclaw devices list` to find the pending device request id (a UUID shown in the `Pending pair` device row), then run `openclaw devices approve <pending-request-id>`.
+If you need to force a custom upstream, you can still set `OPENCLAW_GATEWAY_URL` and `OPENCLAW_GATEWAY_TOKEN` in root `.env`.
 
 ### Optional: Run server + web separately
 
