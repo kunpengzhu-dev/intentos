@@ -85,7 +85,7 @@ packages/openclaw-gateway-client/
 import { OpenClawGatewayClient } from "./src/index.js";
 
 const client = new OpenClawGatewayClient({
-  url: "ws://127.0.0.1:18789",
+  url: "ws://localhost:18789",
   auth: { token: process.env.OPENCLAW_TOKEN },
   role: "operator",
   scopes: ["operator.admin"],
@@ -148,7 +148,7 @@ import {
 } from "./src/index.js";
 
 const client = new OpenClawGatewayClient({
-  url: "ws://127.0.0.1:18789",
+  url: "ws://localhost:18789",
   auth: { token: process.env.OPENCLAW_TOKEN },
   deviceIdentity: loadOrCreateGatewayDeviceIdentity("./tmp/device.json"),
 });
@@ -158,7 +158,7 @@ const client = new OpenClawGatewayClient({
 
 ```ts
 const client = new OpenClawGatewayClient({
-  url: "ws://127.0.0.1:18789",
+  url: "ws://localhost:18789",
   auth: { token: process.env.OPENCLAW_TOKEN },
   deviceIdentity: null,
 });
@@ -256,7 +256,6 @@ pnpm test
 
 - `OPENCLAW_GATEWAY_URL`
 - `OPENCLAW_TOKEN`
-- `OPENCLAW_PASSWORD`
 
 如果你还没准备本地环境文件，可以先从 `intentos/.env.example` 复制一份到 `intentos/.env`。
 
@@ -271,7 +270,7 @@ pnpm run smoke
 
 ```bash
 cd intentos/packages/openclaw-gateway-client
-pnpm run smoke -- --url ws://127.0.0.1:18789 --token "$OPENCLAW_TOKEN"
+pnpm run smoke -- --url ws://localhost:18789 --token "$OPENCLAW_TOKEN"
 ```
 
 这个脚本会把你关心的内建 Gateway 方法按项打印成：
@@ -314,7 +313,6 @@ pnpm run smoke -- --url ws://127.0.0.1:18789 --token "$OPENCLAW_TOKEN"
 
 常用参数：
 
-- `--password <value>`：改用 password 鉴权
 - `--scopes operator.admin`：显式覆盖 scopes
 - `--timeout-ms 30000`：调整被动事件观察窗口，默认值也是 `30000`
 - `--allow-insecure-ws`：允许连接远程明文 `ws://`

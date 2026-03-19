@@ -519,12 +519,12 @@ pnpm dev:backend
 
 默认监听：
 
-- `127.0.0.1:3030`
+- `localhost:3030`
 
 文档入口：
 
-- `http://127.0.0.1:3030/docs`
-- `http://127.0.0.1:3030/docs/json`
+- `http://localhost:3030/docs`
+- `http://localhost:3030/docs/json`
 
 ## 校验
 

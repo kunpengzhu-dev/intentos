@@ -224,7 +224,7 @@ class LocalGatewayServer {
       },
       options.handlers ?? {},
     );
-    await new Promise<void>((resolve) => server.server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => server.server.listen(0, "localhost", resolve));
     return server;
   }
 
@@ -233,7 +233,7 @@ class LocalGatewayServer {
     if (!address || typeof address === "string") {
       throw new Error("local gateway server is not listening");
     }
-    return `ws://127.0.0.1:${address.port}`;
+    return `ws://localhost:${address.port}`;
   }
 
   async close(): Promise<void> {
@@ -483,7 +483,7 @@ function createTempDeviceIdentityPath(): string {
 test("connects, sends expected connect defaults, and handles single-response requests", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     auth: { token: "shared-token" },
     deviceIdentityPath: createTempDeviceIdentityPath(),
   }));
@@ -524,7 +524,7 @@ test("connects, sends expected connect defaults, and handles single-response req
 test("allows explicitly disabling device identity on connect", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     auth: { token: "shared-token" },
     deviceIdentity: null,
   }));
@@ -537,7 +537,7 @@ test("allows explicitly disabling device identity on connect", async () => {
 test("handles accepted-plus-final phased responses", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
   }));
   const { socket } = await establishConnection(transport);
 
@@ -567,7 +567,7 @@ test("handles accepted-plus-final phased responses", async () => {
 test("treats a single final phased response as both accepted and final", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
   }));
   const { socket } = await establishConnection(transport);
 
@@ -591,7 +591,7 @@ test("treats a single final phased response as both accepted and final", async (
 test("client chat helper waits for the final chat event and reports sequence gaps", async () => {
   installMockWebSocket();
   const client = trackCloseable(new OpenClawGatewayClient({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
   }));
   const gaps: Array<{ expected: number; received: number }> = [];
   client.onGap((gap) => gaps.push(gap));
@@ -635,7 +635,7 @@ test("client chat helper waits for the final chat event and reports sequence gap
 test("exposes inbound frames without changing connect challenge handling", async () => {
   installMockWebSocket();
   const client = trackCloseable(new OpenClawGatewayClient({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
   }));
   const inboundFrames: GatewayInboundFrame[] = [];
   client.onInboundFrame((frame) => inboundFrames.push(frame));
@@ -688,8 +688,7 @@ test("rejects insecure remote ws endpoints before opening a socket", async () =>
 test("pauses reconnect after terminal auth failures", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
-    auth: { password: "secret" },
+    url: "ws://localhost:18789",
     reconnect: true,
     reconnectDelayMs: 1,
     maxReconnectDelayMs: 5,
@@ -712,8 +711,8 @@ test("pauses reconnect after terminal auth failures", async () => {
     ok: false,
     error: {
       code: "UNAUTHORIZED",
-      message: "bad password",
-      details: { code: "AUTH_PASSWORD_MISMATCH" },
+      message: "missing token",
+      details: { code: "AUTH_TOKEN_MISSING" },
     },
   });
 
@@ -728,7 +727,7 @@ test("retries once with a stored device token and persists the refreshed token",
   const helloSeen = createDeferred<GatewayHelloOk>();
   const storeCalls: DeviceTokenStoreCall[] = [];
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     auth: { token: "shared-token" },
     reconnect: true,
     reconnectDelayMs: 1,
@@ -818,7 +817,7 @@ test("clears a stale stored device token after device-token mismatch", async () 
   installMockWebSocket();
   const cleared: Array<{ url: string; role: string }> = [];
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     reconnect: false,
     loadDeviceToken: () => "stale-device-token",
     clearDeviceToken: (params) => {
@@ -855,7 +854,7 @@ test("clears a stale stored device token after device-token mismatch", async () 
   await assert.rejects(connectPromise, GatewayRequestError);
   await waitFor(() => (cleared.length > 0 ? cleared[0] : undefined));
   assert.deepEqual(cleared[0], {
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     role: "operator",
   });
 });
@@ -863,7 +862,7 @@ test("clears a stale stored device token after device-token mismatch", async () 
 test("rejects invalid hello payloads from connect", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
     reconnect: false,
   }));
 
@@ -891,7 +890,7 @@ test("rejects invalid hello payloads from connect", async () => {
 test("waitForEvent supports timeout and abort", async () => {
   installMockWebSocket();
   const transport = trackCloseable(new GatewayTransport({
-    url: "ws://127.0.0.1:18789",
+    url: "ws://localhost:18789",
   }));
   await establishConnection(transport);
 

@@ -97,7 +97,7 @@ function reserveLocalPort() {
     const probe = net.createServer();
     probe.unref();
     probe.on('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
+    probe.listen(0, 'localhost', () => {
       const address = probe.address();
       if (typeof address === 'string' || !address) {
         probe.close(() => reject(new Error('Failed to allocate a localhost port')));
@@ -113,7 +113,7 @@ function waitForPort(port, timeoutMs = 15000) {
     const startedAt = Date.now();
 
     const tryConnect = () => {
-      const socket = net.connect({ host: '127.0.0.1', port });
+      const socket = net.connect({ host: 'localhost', port });
       socket.once('connect', () => {
         socket.destroy();
         resolve();
@@ -138,12 +138,12 @@ async function startEmbeddedBackend() {
   }
 
   if (rendererUrl) {
-    return 'http://127.0.0.1:3030';
+    return 'http://localhost:3030';
   }
 
   const workspaceRoot = resolveWorkspaceRoot();
   const port = await reserveLocalPort();
-  const backendUrl = `http://127.0.0.1:${port}`;
+  const backendUrl = `http://localhost:${port}`;
 
   embeddedBackend = spawn(
     'pnpm',
@@ -152,7 +152,7 @@ async function startEmbeddedBackend() {
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        INTENTOS_BACKEND_HOST: '127.0.0.1',
+        INTENTOS_BACKEND_HOST: 'localhost',
         INTENTOS_BACKEND_PORT: String(port),
       },
       stdio: 'inherit',

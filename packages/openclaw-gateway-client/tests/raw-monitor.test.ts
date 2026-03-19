@@ -17,13 +17,13 @@ test("raw monitor parseArgs prefers cli token over file env", () => {
     ],
     {},
     {
-      OPENCLAW_GATEWAY_URL: "ws://127.0.0.1:18789",
+      OPENCLAW_GATEWAY_URL: "ws://localhost:18789",
       OPENCLAW_TOKEN: "env-token",
     },
   );
   assert.ok(args);
   assert.equal(args.token, "cli-token");
-  assert.equal(args.url, "ws://127.0.0.1:18789");
+  assert.equal(args.url, "ws://localhost:18789");
   assert.deepEqual(args.scopes, ["operator.admin"]);
   assert.deepEqual(args.events, ["agent", "chat"]);
   assert.equal(args.chat, "hello");

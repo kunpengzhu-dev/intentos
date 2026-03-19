@@ -23,13 +23,13 @@ function createLogger() {
 
 test("parseDotEnv reads simple key-value pairs", () => {
   const parsed = parseDotEnv(`
-OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
+OPENCLAW_GATEWAY_URL=ws://localhost:18789
 OPENCLAW_TOKEN="secret"
 # comment
 `);
 
   assert.deepEqual(parsed, {
-    OPENCLAW_GATEWAY_URL: "ws://127.0.0.1:18789",
+    OPENCLAW_GATEWAY_URL: "ws://localhost:18789",
     OPENCLAW_TOKEN: "secret",
   });
 });

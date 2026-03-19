@@ -6,10 +6,6 @@ function readDesktopBridge(): DesktopBridge | undefined {
   return (window as typeof window & { __INTENTOS_DESKTOP__?: DesktopBridge }).__INTENTOS_DESKTOP__;
 }
 
-function readEnvApiBaseUrl(): string | undefined {
-  return import.meta.env.VITE_API_BASE_URL;
-}
-
 function readEnvBootAlwaysShow(): string | undefined {
   return import.meta.env.VITE_BOOT_ALWAYS_SHOW;
 }
@@ -25,7 +21,7 @@ function trimTrailingSlash(value: string): string {
 }
 
 export function getBackendBaseUrl(): string | null {
-  const candidate = readDesktopBridge()?.apiBaseUrl ?? readEnvApiBaseUrl();
+  const candidate = readDesktopBridge()?.apiBaseUrl;
   if (!candidate) return null;
 
   const normalized = trimTrailingSlash(candidate);

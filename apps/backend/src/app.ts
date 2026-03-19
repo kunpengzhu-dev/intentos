@@ -22,7 +22,6 @@ function createDefaultCoordinator(config: BackendConfig): IntentCoordinator {
     url: config.gatewayUrl,
     auth: {
       token: config.gatewayToken,
-      password: config.gatewayPassword,
     },
     role: "operator",
     scopes: ["operator.admin"],

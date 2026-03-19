@@ -20,7 +20,6 @@ import type {
 export type ParsedArgs = {
   url: string;
   token?: string;
-  password?: string;
   role: "operator" | "node";
   scopes: string[];
   timeoutMs: number;
@@ -115,7 +114,7 @@ function printUsage(logger: Logger): void {
     [
       "Usage:",
       "  pnpm run smoke",
-      "  pnpm run smoke -- --url ws://127.0.0.1:18789 --token <token>",
+      "  pnpm run smoke -- --url ws://localhost:18789 --token <token>",
       "",
       "Defaults:",
       "  Reads intentos/.env before falling back to built-in defaults.",
@@ -123,7 +122,6 @@ function printUsage(logger: Logger): void {
       "Options:",
       "  --url <ws-url>                Gateway WebSocket URL",
       "  --token <token>               Shared gateway token",
-      "  --password <password>         Shared gateway password",
       '  --role <operator|node>        Client role (default: "operator")',
       '  --scopes <csv>                Requested scopes (default: "operator.admin")',
       "  --timeout-ms <number>         Wait timeout for passive observation (default: 30000)",
@@ -167,9 +165,8 @@ export function parseArgs(
   const getValue = (flag: string, envKey: string): string | undefined =>
     readFlagValue(argv, flag) ?? env[envKey] ?? fileEnv[envKey] ?? undefined;
 
-  const url = getValue("--url", "OPENCLAW_GATEWAY_URL") ?? "ws://127.0.0.1:18789";
+  const url = getValue("--url", "OPENCLAW_GATEWAY_URL") ?? "ws://localhost:18789";
   const token = getValue("--token", "OPENCLAW_TOKEN");
-  const password = getValue("--password", "OPENCLAW_PASSWORD");
   const roleRaw = getValue("--role", "OPENCLAW_GATEWAY_ROLE") ?? "operator";
   if (roleRaw !== "operator" && roleRaw !== "node") {
     throw new Error(`invalid --role: ${roleRaw}`);
@@ -184,7 +181,6 @@ export function parseArgs(
   return {
     url,
     token,
-    password,
     role: roleRaw,
     scopes: parseScopes(getValue("--scopes", "OPENCLAW_GATEWAY_SCOPES")),
     timeoutMs,
@@ -603,11 +599,11 @@ function getEventObservationWaitMs(timeoutMs: number): number {
 }
 
 function assertAuthConfigured(parsed: ParsedArgs): void {
-  if (parsed.token || parsed.password) {
+  if (parsed.token) {
     return;
   }
   throw new Error(
-    `gateway auth is not configured. Set OPENCLAW_TOKEN or OPENCLAW_PASSWORD in ${parsed.envPath}, your environment, or CLI flags.`,
+    `gateway auth is not configured. Set OPENCLAW_TOKEN in ${parsed.envPath}, your environment, or CLI flags.`,
   );
 }
 
@@ -640,7 +636,6 @@ export async function runSmoke(
     allowInsecureWs: parsed.allowInsecureWs,
     auth: {
       token: parsed.token,
-      password: parsed.password,
     },
     client: {
       id: "gateway-client",

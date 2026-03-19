@@ -15,7 +15,6 @@ type Logger = Pick<Console, "log" | "error">;
 export type ParsedArgs = {
   url: string;
   token?: string;
-  password?: string;
   role: "operator" | "node";
   scopes: string[];
   events?: string[];
@@ -37,7 +36,6 @@ function printUsage(logger: Logger): void {
       "Options:",
       "  --url <ws-url>                Gateway WebSocket URL",
       "  --token <token>               Shared gateway token",
-      "  --password <password>         Shared gateway password",
       '  --role <operator|node>        Default: "operator"',
       '  --scopes <csv>                Default: "operator.admin"',
       "  --events <csv>                Only log selected inbound event frames",
@@ -171,9 +169,8 @@ export function parseArgs(
   const getValue = (flag: string, envKey: string): string | undefined =>
     readFlagValue(argv, flag) ?? env[envKey] ?? fileEnv[envKey] ?? undefined;
 
-  const url = getValue("--url", "OPENCLAW_GATEWAY_URL") ?? "ws://127.0.0.1:18789";
+  const url = getValue("--url", "OPENCLAW_GATEWAY_URL") ?? "ws://localhost:18789";
   const token = getValue("--token", "OPENCLAW_TOKEN");
-  const password = getValue("--password", "OPENCLAW_PASSWORD");
   const roleRaw = getValue("--role", "OPENCLAW_GATEWAY_ROLE") ?? "operator";
   if (roleRaw !== "operator" && roleRaw !== "node") {
     throw new Error(`invalid --role: ${roleRaw}`);
@@ -182,7 +179,6 @@ export function parseArgs(
   return {
     url,
     token,
-    password,
     role: roleRaw,
     scopes: parseScopes(getValue("--scopes", "OPENCLAW_GATEWAY_SCOPES")),
     events: parseEvents(getValue("--events", "OPENCLAW_RAW_MONITOR_EVENTS")),
@@ -199,9 +195,9 @@ export async function startRawMonitor(
   args: ParsedArgs,
   logger: Logger = console,
 ): Promise<{ outPath: string }> {
-  if (!args.token && !args.password) {
+  if (!args.token) {
     throw new Error(
-      "gateway auth is not configured. Set OPENCLAW_TOKEN or OPENCLAW_PASSWORD, or pass --token/--password.",
+      "gateway auth is not configured. Set OPENCLAW_TOKEN, or pass --token.",
     );
   }
   if (!isSecureGatewayUrl(args.url, args.allowInsecureWs)) {
@@ -310,13 +306,11 @@ export async function startRawMonitor(
           role: args.role,
           scopes: args.scopes,
           caps,
-          auth:
-            args.token || args.password
-              ? {
-                  ...(args.token ? { token: args.token } : {}),
-                  ...(args.password ? { password: args.password } : {}),
-                }
-              : undefined,
+          auth: args.token
+            ? {
+                token: args.token,
+              }
+            : undefined,
           device: createSignedGatewayDevice({
             identity,
             clientId: client.id,

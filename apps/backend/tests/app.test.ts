@@ -95,10 +95,10 @@ test("health route exposes gateway state", async () => {
 
   const app = await createApp({
     config: {
-      host: "127.0.0.1",
+      host: "localhost",
       port: 3030,
       corsOrigin: true,
-      gatewayUrl: "ws://127.0.0.1:18789",
+      gatewayUrl: "ws://localhost:18789",
       orbIntentKey: "agent:main:main",
       defaultHistoryLimit: 50,
       defaultPreviewLimit: 5,
@@ -135,10 +135,10 @@ test("swagger json route exposes openapi document", async () => {
 
   const app = await createApp({
     config: {
-      host: "127.0.0.1",
+      host: "localhost",
       port: 3030,
       corsOrigin: true,
-      gatewayUrl: "ws://127.0.0.1:18789",
+      gatewayUrl: "ws://localhost:18789",
       orbIntentKey: "agent:main:main",
       defaultHistoryLimit: 50,
       defaultPreviewLimit: 5,
@@ -172,10 +172,10 @@ test("root route serves the orb chat frontend", async () => {
 
   const app = await createApp({
     config: {
-      host: "127.0.0.1",
+      host: "localhost",
       port: 3030,
       corsOrigin: true,
-      gatewayUrl: "ws://127.0.0.1:18789",
+      gatewayUrl: "ws://localhost:18789",
       orbIntentKey: "agent:main:main",
       defaultHistoryLimit: 50,
       defaultPreviewLimit: 5,
@@ -231,10 +231,10 @@ test("view route preserves toolcall ids in serialized history", async () => {
 
   const app = await createApp({
     config: {
-      host: "127.0.0.1",
+      host: "localhost",
       port: 3030,
       corsOrigin: true,
-      gatewayUrl: "ws://127.0.0.1:18789",
+      gatewayUrl: "ws://localhost:18789",
       orbIntentKey: "agent:main:main",
       defaultHistoryLimit: 50,
       defaultPreviewLimit: 5,

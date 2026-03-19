@@ -10,7 +10,6 @@ export type BackendConfig = {
   corsOrigin: true | string | string[];
   gatewayUrl: string;
   gatewayToken?: string;
-  gatewayPassword?: string;
   orbIntentKey: string;
   defaultHistoryLimit: number;
   defaultPreviewLimit: number;
@@ -46,12 +45,11 @@ export function loadBackendConfig(): BackendConfig {
   };
 
   return {
-    host: env.INTENTOS_BACKEND_HOST ?? "127.0.0.1",
+    host: env.INTENTOS_BACKEND_HOST ?? "localhost",
     port: parseNumber(env.INTENTOS_BACKEND_PORT, 3030),
     corsOrigin: parseCorsOrigin(env.INTENTOS_BACKEND_CORS_ORIGIN),
-    gatewayUrl: env.OPENCLAW_GATEWAY_URL ?? "ws://127.0.0.1:18789",
+    gatewayUrl: env.OPENCLAW_GATEWAY_URL ?? "ws://localhost:18789",
     gatewayToken: env.OPENCLAW_TOKEN,
-    gatewayPassword: env.OPENCLAW_PASSWORD,
     orbIntentKey: env.INTENTOS_ORB_INTENT_KEY ?? "agent:main:intentos:global",
     defaultHistoryLimit: parseNumber(env.INTENTOS_HISTORY_LIMIT, 100),
     defaultPreviewLimit: parseNumber(env.INTENTOS_PREVIEW_LIMIT, 6),

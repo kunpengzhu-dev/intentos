@@ -31,7 +31,7 @@ cp .env.example .env
 3. Add your OpenClaw auth to `.env`:
 
 ```env
-OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
+OPENCLAW_GATEWAY_URL=ws://localhost:18789
 OPENCLAW_TOKEN=...
 ```
 
@@ -64,6 +64,7 @@ pnpm test
 
 ## Notes
 
-- Backend defaults to `http://127.0.0.1:3030`
-- Frontend dev server defaults to `http://127.0.0.1:5173`
+- Backend defaults to `http://localhost:3030`
+- Frontend dev server defaults to `http://localhost:5173`
+- Web frontend now assumes same-origin deployment and calls relative `/api/...` paths by default; in dev, Vite proxies `/api` to `http://localhost:3030`, and in same-origin production the browser sends `/api` back to the backend host that served the page.
 - `VITE_BOOT_ALWAYS_SHOW=1` keeps the boot sequence visible on every launch

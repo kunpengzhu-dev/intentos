@@ -56,8 +56,6 @@ export class GatewayRequestError extends Error {
 const CONNECT_ERROR_DETAIL_CODES = {
   AUTH_TOKEN_MISSING: "AUTH_TOKEN_MISSING",
   AUTH_TOKEN_MISMATCH: "AUTH_TOKEN_MISMATCH",
-  AUTH_PASSWORD_MISSING: "AUTH_PASSWORD_MISSING",
-  AUTH_PASSWORD_MISMATCH: "AUTH_PASSWORD_MISMATCH",
   AUTH_DEVICE_TOKEN_MISMATCH: "AUTH_DEVICE_TOKEN_MISMATCH",
   AUTH_RATE_LIMITED: "AUTH_RATE_LIMITED",
   CONTROL_UI_DEVICE_IDENTITY_REQUIRED: "CONTROL_UI_DEVICE_IDENTITY_REQUIRED",
@@ -495,7 +493,7 @@ export class GatewayTransport {
     this.clearChallengeTimer();
     this.stopTickWatch();
 
-    const url = this.options.url ?? "ws://127.0.0.1:18789";
+    const url = this.options.url ?? "ws://localhost:18789";
     if (!isSecureGatewayUrl(url, this.options.allowInsecureWs ?? false)) {
       let displayHost = url;
       try {
@@ -640,9 +638,8 @@ export class GatewayTransport {
     this.connectRequestId = id;
     const protocolVersion = this.options.protocolVersion ?? 3;
     const role = this.options.role ?? "operator";
-    const url = this.options.url ?? "ws://127.0.0.1:18789";
+    const url = this.options.url ?? "ws://localhost:18789";
     const explicitGatewayToken = normalizeAuthToken(this.options.auth?.token);
-    const explicitPassword = normalizeAuthToken(this.options.auth?.password);
     const explicitDeviceToken = normalizeAuthToken(this.options.auth?.deviceToken);
     const clientDescriptor = buildClientDescriptor(this.options);
     let storedDeviceToken: string | undefined;
@@ -689,15 +686,14 @@ export class GatewayTransport {
     }
     const resolvedDeviceToken =
       explicitDeviceToken ??
-      (shouldUseRetryToken || !(explicitGatewayToken || explicitPassword)
+      (shouldUseRetryToken || !explicitGatewayToken
         ? storedDeviceToken
         : undefined);
     const authToken = explicitGatewayToken ?? resolvedDeviceToken;
     const auth =
-      authToken || explicitPassword || resolvedDeviceToken
+      authToken || resolvedDeviceToken
         ? {
             token: authToken,
-            password: explicitPassword,
             deviceToken: resolvedDeviceToken,
           }
         : undefined;
@@ -835,7 +831,7 @@ export class GatewayTransport {
       this.pendingConnectErrorDetailCode === CONNECT_ERROR_DETAIL_CODES.AUTH_DEVICE_TOKEN_MISMATCH &&
       this.lastConnectUsedStoredDeviceToken
     ) {
-      const url = this.options.url ?? "ws://127.0.0.1:18789";
+      const url = this.options.url ?? "ws://localhost:18789";
       const role = this.options.role ?? "operator";
       void this.options.clearDeviceToken?.({ url, role });
     }
@@ -954,8 +950,6 @@ export class GatewayTransport {
     }
     if (
       detailCode === CONNECT_ERROR_DETAIL_CODES.AUTH_TOKEN_MISSING ||
-      detailCode === CONNECT_ERROR_DETAIL_CODES.AUTH_PASSWORD_MISSING ||
-      detailCode === CONNECT_ERROR_DETAIL_CODES.AUTH_PASSWORD_MISMATCH ||
       detailCode === CONNECT_ERROR_DETAIL_CODES.AUTH_RATE_LIMITED ||
       detailCode === CONNECT_ERROR_DETAIL_CODES.PAIRING_REQUIRED ||
       detailCode === CONNECT_ERROR_DETAIL_CODES.CONTROL_UI_DEVICE_IDENTITY_REQUIRED ||
@@ -999,7 +993,7 @@ export class GatewayTransport {
   }
 
   private isTrustedDeviceRetryEndpoint(): boolean {
-    const rawUrl = this.options.url ?? "ws://127.0.0.1:18789";
+    const rawUrl = this.options.url ?? "ws://localhost:18789";
     try {
       const parsed = new URL(rawUrl);
       return isLoopbackHost(parsed.hostname) || parsed.protocol === "wss:";

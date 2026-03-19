@@ -6,7 +6,6 @@ export type JsonObject = { [key: string]: JsonValue };
 
 export type GatewayAuth = {
   token?: string;
-  password?: string;
   deviceToken?: string;
 };
 

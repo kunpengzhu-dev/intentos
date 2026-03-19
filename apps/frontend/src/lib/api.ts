@@ -6,7 +6,7 @@ import type {
   SendIntentMessageRequest,
   SendIntentMessageResponse,
 } from '@intentos/shared';
-import { resolveBackendUrl } from './runtime-config';
+import { resolveBackendUrl } from './runtimeConfig';
 
 type HealthResponse = {
   ok: boolean;
