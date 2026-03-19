@@ -17,9 +17,11 @@ export function Orb({
   initialDraft: string;
   onDraftConsumed: () => void;
 }) {
+  const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 24;
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [panelPlacement, setPanelPlacement] = useState<'top' | 'bottom'>('bottom');
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   const orbButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelRafRef = useRef<number | null>(null);
@@ -61,8 +63,11 @@ export function Orb({
     if (!isOpen) {
       return;
     }
+    if (!shouldAutoScroll) {
+      return;
+    }
     chatEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [entries, isOpen]);
+  }, [entries, isOpen, shouldAutoScroll]);
 
   const updatePanelPosition = useCallback(() => {
     if (!isOpen) {
@@ -136,12 +141,43 @@ export function Orb({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!intentKey) {
+      setShouldAutoScroll(false);
+    }
+  }, [intentKey]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setShouldAutoScroll(true);
+  }, [isOpen]);
+
+  const handleMessagesScroll = useCallback(
+    ({
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+    }: {
+      scrollTop: number;
+      scrollHeight: number;
+      clientHeight: number;
+    }) => {
+      const isNearBottom =
+        scrollHeight - clientHeight - scrollTop <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+      setShouldAutoScroll((current) => (current === isNearBottom ? current : isNearBottom));
+    },
+    [],
+  );
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || !intentKey || isConversationPending) {
       return;
     }
 
+    setShouldAutoScroll(true);
     await conversation.sendMessage(text);
     setInput('');
   }, [conversation, input, intentKey, isConversationPending]);
@@ -177,6 +213,7 @@ export function Orb({
             onSend={() => {
               void handleSend();
             }}
+            onMessagesScroll={handleMessagesScroll}
             onClose={() => setIsOpen(false)}
             placement={panelPlacement}
             panelMotionStyle={{ x: panelX, y: panelY }}

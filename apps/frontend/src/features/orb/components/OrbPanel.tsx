@@ -42,7 +42,11 @@ export function OrbPanel({
   onInputEnter: () => void;
   onSend: () => void;
   onClose: () => void;
-  onMessagesScroll?: (scrollTop: number) => void;
+  onMessagesScroll?: (metrics: {
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  }) => void;
   placement: 'top' | 'bottom';
   panelMotionStyle: { x: MotionValue<number>; y: MotionValue<number> };
   panelRef: RefObject<HTMLDivElement | null>;
@@ -73,7 +77,13 @@ export function OrbPanel({
 
       <div
         className="orb-panel__messages"
-        onScroll={(event) => onMessagesScroll?.(event.currentTarget.scrollTop)}
+        onScroll={(event) =>
+          onMessagesScroll?.({
+            scrollTop: event.currentTarget.scrollTop,
+            scrollHeight: event.currentTarget.scrollHeight,
+            clientHeight: event.currentTarget.clientHeight,
+          })
+        }
       >
         {messages.length === 0 && (
           <p className="orb-panel__empty">
