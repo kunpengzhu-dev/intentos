@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@source "../index.html";
+@source "./";
+@import "./features/boot/boot.css";
+@import "./features/orb/orb.css";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  :root {
+    --os1-progress-track: rgba(130, 168, 215, 0.25);
+    --os1-progress-fill-1: rgba(165, 228, 255, 0.82);
+    --os1-progress-fill-2: rgba(77, 184, 255, 1);
+    --os1-progress-text: rgba(218, 238, 255, 0.96);
+    --orb-size-center: 100px;
+    --orb-size-corner: 50px;
+    --orb-corner-right-min: 44px;
+    --orb-corner-right-max: 70px;
+    --orb-corner-right-vw: 7vw;
+    --orb-corner-top-min: 34px;
+    --orb-corner-top-max: 58px;
+    --orb-corner-top-vh: 6vh;
+  }
+
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Helvetica Neue', Helvetica, sans-serif;
+    background: radial-gradient(circle at 50% 38%, #1f3249 0%, #101926 46%, #070d15 100%);
+    color: #d7ecff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(125, 145, 171, 0.45); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(84, 109, 143, 0.7); }
+}

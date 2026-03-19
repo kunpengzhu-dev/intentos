@@ -1,27 +1,22 @@
 {
   "name": "intentos",
   "private": true,
-  "type": "module",
+  "packageManager": "pnpm@10.23.0",
   "scripts": {
-    "dev": "turbo dev",
+    "dev:backend": "pnpm --filter @intentos/backend dev",
+    "check:backend": "pnpm --filter @intentos/backend check",
+    "test:backend": "pnpm --filter @intentos/backend test",
+    "dev:frontend": "pnpm --filter @intentos/frontend dev",
+    "build:frontend": "pnpm --filter @intentos/frontend build",
+    "check:frontend": "pnpm --filter @intentos/frontend check",
     "dev:desktop": "pnpm --filter @intentos/desktop dev",
-    "build": "turbo build",
     "build:desktop": "pnpm --filter @intentos/desktop build",
-    "prepare:harmony": "pnpm --filter @intentos/desktop prepare:harmony",
-    "lint": "turbo lint",
-    "format": "prettier --write .",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
-    "clean": "turbo clean",
-    "desktop": "pnpm --filter @intentos/desktop start"
+    "start:desktop": "pnpm --filter @intentos/desktop start",
+    "check": "pnpm check:backend && pnpm check:frontend",
+    "test": "pnpm test:backend"
   },
-  "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.3",
-    "turbo": "^2.4.4",
-    "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.0"
-  },
-  "packageManager": "pnpm@9.15.4"
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

@@ -1,16 +1,17 @@
 import { app, BrowserWindow, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
-const serverBaseUrlFromEnv = process.env.INTENTOS_SERVER_URL;
+const backendUrlFromEnv = process.env.INTENTOS_BACKEND_URL;
 const preloadPath = path.resolve(__dirname, 'preload.mjs');
-let embeddedServer = null;
+let embeddedBackend = null;
+let embeddedBackendUrl = null;
 let isQuitting = false;
 
 function stringifyError(error) {
@@ -80,23 +81,18 @@ function findFirstExistingPath(paths) {
   return null;
 }
 
+function resolveWorkspaceRoot() {
+  return path.resolve(__dirname, '../../..');
+}
+
 function resolveRendererEntry() {
   return findFirstExistingPath([
-    path.resolve(__dirname, '../../web/dist/index.html'),
-    path.resolve(__dirname, '../web/dist/index.html'),
-    path.resolve(app.getAppPath(), 'web/dist/index.html'),
+    path.resolve(__dirname, '../../frontend/dist/index.html'),
+    path.resolve(app.getAppPath(), 'frontend/dist/index.html'),
   ]);
 }
 
-function resolveServerEntry() {
-  return findFirstExistingPath([
-    path.resolve(__dirname, '../../server/dist/index.js'),
-    path.resolve(__dirname, '../server/dist/index.js'),
-    path.resolve(app.getAppPath(), 'server/dist/index.js'),
-  ]);
-}
-
-async function reserveLocalPort() {
+function reserveLocalPort() {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
     probe.unref();
@@ -107,44 +103,90 @@ async function reserveLocalPort() {
         probe.close(() => reject(new Error('Failed to allocate a localhost port')));
         return;
       }
-      probe.close((err) => (err ? reject(err) : resolve(address.port)));
+      probe.close((error) => (error ? reject(error) : resolve(address.port)));
     });
   });
 }
 
-async function startEmbeddedServer() {
-  if (serverBaseUrlFromEnv) {
-    return serverBaseUrlFromEnv;
+function waitForPort(port, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const tryConnect = () => {
+      const socket = net.connect({ host: '127.0.0.1', port });
+      socket.once('connect', () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.once('error', () => {
+        socket.destroy();
+        if (Date.now() - startedAt > timeoutMs) {
+          reject(new Error(`Timed out waiting for backend on port ${port}`));
+          return;
+        }
+        setTimeout(tryConnect, 250);
+      });
+    };
+
+    tryConnect();
+  });
+}
+
+async function startEmbeddedBackend() {
+  if (backendUrlFromEnv) {
+    return backendUrlFromEnv;
   }
 
   if (rendererUrl) {
-    return 'http://localhost:3001';
+    return 'http://127.0.0.1:3030';
   }
 
-  const serverEntry = resolveServerEntry();
-  if (!serverEntry) {
-    throw new Error('Cannot find bundled server entry. Build @intentos/server before starting desktop.');
-  }
-
+  const workspaceRoot = resolveWorkspaceRoot();
   const port = await reserveLocalPort();
-  const userDataDir = app.getPath('userData');
-  process.env.PORT = String(port);
-  process.env.BOOT_CALLBACK_BASE_URL = `http://127.0.0.1:${port}`;
-  const runtimeNodeCommand = process.argv0 || process.execPath;
-  if (!process.env.BOOT_PROVIDER_COMMAND || process.env.BOOT_PROVIDER_COMMAND === 'node') {
-    process.env.BOOT_PROVIDER_COMMAND = runtimeNodeCommand;
-  }
-  process.env.DATABASE_URL ??= path.join(userDataDir, 'data', 'intentos.db');
-  process.env.ARTIFACT_STORAGE_DIR ??= path.join(userDataDir, 'artifacts');
+  const backendUrl = `http://127.0.0.1:${port}`;
 
-  const moduleUrl = pathToFileURL(serverEntry).href;
-  const { startIntentosServer } = await import(moduleUrl);
-  embeddedServer = await startIntentosServer({ host: '127.0.0.1', port });
+  embeddedBackend = spawn(
+    'pnpm',
+    ['--dir', workspaceRoot, '--filter', '@intentos/backend', 'start'],
+    {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        INTENTOS_BACKEND_HOST: '127.0.0.1',
+        INTENTOS_BACKEND_PORT: String(port),
+      },
+      stdio: 'inherit',
+    },
+  );
 
-  return embeddedServer.url;
+  embeddedBackend.once('exit', (code) => {
+    if (!isQuitting && code !== 0) {
+      console.error(`[desktop] embedded backend exited early with code ${code ?? 'unknown'}`);
+    }
+  });
+
+  await waitForPort(port);
+  embeddedBackendUrl = backendUrl;
+  return backendUrl;
 }
 
-function createMainWindow(serverBaseUrl) {
+function stopEmbeddedBackend() {
+  if (!embeddedBackend || embeddedBackend.killed) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    embeddedBackend.once('exit', () => resolve());
+    embeddedBackend.kill('SIGTERM');
+    setTimeout(() => {
+      if (embeddedBackend && !embeddedBackend.killed) {
+        embeddedBackend.kill('SIGKILL');
+      }
+    }, 5000);
+  });
+}
+
+function createMainWindow(backendUrl) {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -156,7 +198,7 @@ function createMainWindow(serverBaseUrl) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      additionalArguments: [`--intentos-server-url=${serverBaseUrl}`],
+      additionalArguments: [`--intentos-backend-url=${backendUrl}`],
     },
   });
 
@@ -173,19 +215,20 @@ function createMainWindow(serverBaseUrl) {
 
   const rendererEntry = resolveRendererEntry();
   if (!rendererEntry) {
-    throw new Error('Cannot find renderer build output. Build @intentos/web first.');
+    throw new Error('Cannot find renderer build output. Build @intentos/frontend first.');
   }
 
   void mainWindow.loadFile(rendererEntry);
 }
 
 app.whenReady().then(async () => {
-  const serverBaseUrl = await startEmbeddedServer();
-  createMainWindow(serverBaseUrl);
+  const backendUrl = await startEmbeddedBackend();
+  embeddedBackendUrl = backendUrl;
+  createMainWindow(backendUrl);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow(serverBaseUrl);
+    if (BrowserWindow.getAllWindows().length === 0 && embeddedBackendUrl) {
+      createMainWindow(embeddedBackendUrl);
     }
   });
 }).catch((error) => {
@@ -201,16 +244,19 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
-  if (!embeddedServer || isQuitting) {
+  if (isQuitting) {
+    return;
+  }
+
+  if (!embeddedBackend) {
     return;
   }
 
   event.preventDefault();
   isQuitting = true;
-  embeddedServer
-    .close()
+  stopEmbeddedBackend()
     .catch((error) => {
-      console.error('[desktop] failed to stop embedded server', error);
+      console.error('[desktop] failed to stop embedded backend', error);
     })
     .finally(() => {
       app.quit();

@@ -5,16 +5,10 @@
   "type": "module",
   "main": "src/main.mjs",
   "scripts": {
-    "dev": "pnpm run dev:prepare && concurrently -k \"pnpm --filter @intentos/server dev\" \"pnpm --filter @intentos/web dev\" \"pnpm dev:electron\"",
-    "dev:prepare": "pnpm --filter @intentos/server... --filter @intentos/web... build",
-    "dev:electron": "wait-on tcp:3001 tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron .",
-    "start": "pnpm build && electron .",
-    "build": "pnpm --filter @intentos/server... --filter @intentos/web... build",
-    "prepare:harmony": "pnpm build && node scripts/prepare-harmony-app.mjs",
-    "lint": "echo \"desktop lint not configured yet\"",
-    "typecheck": "echo \"desktop typecheck not configured yet\"",
-    "test": "echo \"no tests yet\"",
-    "clean": "rm -rf .turbo dist"
+    "dev": "concurrently -k \"pnpm --filter @intentos/backend dev\" \"pnpm --filter @intentos/frontend dev\" \"wait-on tcp:3030 tcp:5173 && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 INTENTOS_BACKEND_URL=http://127.0.0.1:3030 electron .\"",
+    "start": "pnpm --filter @intentos/frontend build && electron .",
+    "build": "pnpm --filter @intentos/frontend build",
+    "test": "echo \"No desktop tests yet\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
