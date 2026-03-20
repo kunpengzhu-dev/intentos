@@ -209,7 +209,6 @@ function createMainWindow(backendUrl) {
 
   if (rendererUrl) {
     void mainWindow.loadURL(rendererUrl);
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
     return;
   }
 
