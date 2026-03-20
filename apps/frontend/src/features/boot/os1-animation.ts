@@ -1,10 +1,15 @@
 import * as THREE from 'three';
+import { BOOT_SEQUENCE } from './constants';
 
 function easing(t: number, b: number, c: number, d: number) {
   let n = t / (d / 2);
   if (n < 1) return (c / 2) * n * n + b;
   n -= 2;
   return (c / 2) * (n * n * n + 2) + b;
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 export type TransitionState = {
@@ -24,8 +29,15 @@ export function createOs1Animation(
   const length = 30;
   const radius = 5.6;
   const pi2 = Math.PI * 2;
+  const frameDurationMs = 1000 / 60;
   const normalRotateValue = 0.035;
   const transformationSpeed = 1;
+  const orientationFrames = Math.round(
+    BOOT_SEQUENCE.transition.orientationDurationMs / frameDurationMs,
+  );
+  const postTurnSpinFrames = Math.round(BOOT_SEQUENCE.transition.postTurnSpinMs / frameDurationMs);
+  const revealFrames = Math.round(BOOT_SEQUENCE.transition.revealDurationMs / frameDurationMs);
+  const totalTransformationFrames = orientationFrames + postTurnSpinFrames + revealFrames;
 
   const state = {
     toend: false,
@@ -111,36 +123,52 @@ export function createOs1Animation(
   wrapper.appendChild(renderer.domElement);
 
   let frameId = 0;
+  let lastFrameTime: number | null = null;
 
-  const render = () => {
+  const render = (now = performance.now()) => {
+    const deltaMs =
+      lastFrameTime === null ? frameDurationMs : Math.min(frameDurationMs * 3, now - lastFrameTime);
+    lastFrameTime = now;
+    const deltaFrames = deltaMs / frameDurationMs;
     const rotatevalue = state.isTTSProcessing ? 0.12 : normalRotateValue;
 
     if (state.toend) {
       state.stepIncrement = transformationSpeed;
-      state.animatestep = Math.min(240, state.animatestep + state.stepIncrement);
+      state.animatestep = Math.min(
+        totalTransformationFrames,
+        state.animatestep + state.stepIncrement * deltaFrames,
+      );
     } else {
       state.stepIncrement = 1;
-      state.animatestep = Math.max(0, state.animatestep - state.stepIncrement * 1.4);
+      state.animatestep = Math.max(0, state.animatestep - state.stepIncrement * 1.4 * deltaFrames);
     }
 
-    const acceleration = easing(state.animatestep, 0, 1, 240);
-    const glowIn = Math.max(0, Math.min(1, (acceleration - 0.9) / 0.045));
-    const glowOut = Math.max(0, Math.min(1, (acceleration - 0.97) / 0.03));
+    const orientationStep = Math.min(orientationFrames, state.animatestep);
+    const acceleration = easing(orientationStep, 0, 1, orientationFrames);
+    const revealStep = clamp01(
+      (state.animatestep - orientationFrames - postTurnSpinFrames) / revealFrames,
+    );
+    const revealProgress = revealStep > 0 ? easing(revealStep, 0, 1, 1) : 0;
+    const glowIn = clamp01(revealProgress / 0.4);
+    const glowOut = clamp01((revealProgress - 0.82) / 0.18);
+    const ribbonFade = clamp01((revealProgress - 0.48) / 0.36);
+    const aiIn = glowOut > 0 ? 1 : clamp01((revealProgress - 0.24) / 0.56);
+
+    group.rotation.y = 0;
+    group.position.z = 0;
 
     if (acceleration > 0.35) {
       const progress = (acceleration - 0.35) / 0.65;
       group.rotation.y = (-Math.PI / 2) * progress;
       group.position.z = 50 * progress;
-      const ribbonFade = Math.max(0, Math.min(1, (acceleration - 0.88) / 0.08));
-      const glowOpacity = Math.max(0, Math.min(1, glowIn * (1 - glowOut)));
+      const glowOpacity = clamp01(glowIn * (1 - glowOut));
       state.glowOpacity = glowOpacity;
-
-      (ribbon.material as THREE.MeshBasicMaterial).opacity = 1 - ribbonFade;
-      (glow.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - ribbonFade);
-      (outerGlow.material as THREE.MeshBasicMaterial).opacity = 0.22 * (1 - ribbonFade);
     }
 
-    const aiIn = glowOut > 0 ? 1 : glowIn;
+    (ribbon.material as THREE.MeshBasicMaterial).opacity = 1 - ribbonFade;
+    (glow.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - ribbonFade);
+    (outerGlow.material as THREE.MeshBasicMaterial).opacity = 0.22 * (1 - ribbonFade);
+
     const shouldShowAISphere = state.toend && aiIn > 0;
     if (state.aiSphereVisible !== shouldShowAISphere || state.glowOpacity > 0 || aiIn > 0) {
       state.aiSphereVisible = shouldShowAISphere;
@@ -150,12 +178,12 @@ export function createOs1Animation(
       });
     }
 
-    if (acceleration <= 0.35 || !state.toend) {
+    if (revealProgress <= 0 || !state.toend) {
       state.glowOpacity = 0;
       onTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
     }
 
-    ribbon.rotation.x += rotatevalue + acceleration;
+    ribbon.rotation.x += (rotatevalue + acceleration) * deltaFrames;
     glow.rotation.x = ribbon.rotation.x;
     outerGlow.rotation.x = ribbon.rotation.x;
 
