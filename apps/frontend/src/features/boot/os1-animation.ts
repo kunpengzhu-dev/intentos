@@ -30,6 +30,8 @@ export function createOs1Animation(
   const radius = 5.6;
   const pi2 = Math.PI * 2;
   const frameDurationMs = 1000 / 60;
+  const transitionEmitEpsilon = 0.01;
+  const tubeSegments = 160;
   const normalRotateValue = 0.035;
   const transformationSpeed = 1;
   const orientationFrames = Math.round(
@@ -46,6 +48,28 @@ export function createOs1Animation(
     isTTSProcessing: false,
     aiSphereVisible: false,
     glowOpacity: 0,
+    lastEmittedGlowOpacity: Number.NaN,
+    lastEmittedAiOpacity: Number.NaN,
+  };
+
+  const emitTransitionChange = (next: TransitionState) => {
+    const glowDelta = Math.abs(state.lastEmittedGlowOpacity - next.glowOpacity);
+    const aiDelta = Math.abs(state.lastEmittedAiOpacity - next.aiOpacity);
+    const shouldEmit =
+      Number.isNaN(state.lastEmittedGlowOpacity) ||
+      Number.isNaN(state.lastEmittedAiOpacity) ||
+      glowDelta >= transitionEmitEpsilon ||
+      aiDelta >= transitionEmitEpsilon ||
+      next.glowOpacity === 0 ||
+      next.glowOpacity === 1 ||
+      next.aiOpacity === 0 ||
+      next.aiOpacity === 1;
+
+    if (!shouldEmit) return;
+
+    state.lastEmittedGlowOpacity = next.glowOpacity;
+    state.lastEmittedAiOpacity = next.aiOpacity;
+    onTransitionChange(next);
   };
 
   const camera = new THREE.PerspectiveCamera(65, 1, 1, 10000);
@@ -73,7 +97,7 @@ export function createOs1Animation(
 
   const path = new CustomCurve();
   const ribbon = new THREE.Mesh(
-    new THREE.TubeGeometry(path, 200, 1.1, 2, true),
+    new THREE.TubeGeometry(path, tubeSegments, 1.1, 2, true),
     new THREE.MeshBasicMaterial({
       color: 0xf3fbff,
       transparent: true,
@@ -83,7 +107,7 @@ export function createOs1Animation(
   group.add(ribbon);
 
   const glow = new THREE.Mesh(
-    new THREE.TubeGeometry(path, 200, 1.65, 2, true),
+    new THREE.TubeGeometry(path, tubeSegments, 1.65, 2, true),
     new THREE.MeshBasicMaterial({
       color: 0x5ebfff,
       transparent: true,
@@ -95,7 +119,7 @@ export function createOs1Animation(
   group.add(glow);
 
   const outerGlow = new THREE.Mesh(
-    new THREE.TubeGeometry(path, 200, 2.2, 2, true),
+    new THREE.TubeGeometry(path, tubeSegments, 2.2, 2, true),
     new THREE.MeshBasicMaterial({
       color: 0x4aaeff,
       transparent: true,
@@ -105,13 +129,20 @@ export function createOs1Animation(
     }),
   );
   group.add(outerGlow);
+  const ribbonMaterial = ribbon.material as THREE.MeshBasicMaterial;
+  const glowMaterial = glow.material as THREE.MeshBasicMaterial;
+  const outerGlowMaterial = outerGlow.material as THREE.MeshBasicMaterial;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance',
+  });
   renderer.setClearColor(0x000000, 0);
 
   const updateSize = () => {
     const size = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setSize(size, size);
     camera.aspect = 1;
     camera.updateProjectionMatrix();
@@ -123,7 +154,17 @@ export function createOs1Animation(
   wrapper.appendChild(renderer.domElement);
 
   let frameId = 0;
+  let frameScheduled = false;
   let lastFrameTime: number | null = null;
+
+  const queueFrame = () => {
+    if (frameScheduled) return;
+    frameScheduled = true;
+    frameId = window.requestAnimationFrame((timestamp) => {
+      frameScheduled = false;
+      render(timestamp);
+    });
+  };
 
   const render = (now = performance.now()) => {
     const deltaMs =
@@ -165,14 +206,14 @@ export function createOs1Animation(
       state.glowOpacity = glowOpacity;
     }
 
-    (ribbon.material as THREE.MeshBasicMaterial).opacity = 1 - ribbonFade;
-    (glow.material as THREE.MeshBasicMaterial).opacity = 0.42 * (1 - ribbonFade);
-    (outerGlow.material as THREE.MeshBasicMaterial).opacity = 0.22 * (1 - ribbonFade);
+    ribbonMaterial.opacity = 1 - ribbonFade;
+    glowMaterial.opacity = 0.42 * (1 - ribbonFade);
+    outerGlowMaterial.opacity = 0.22 * (1 - ribbonFade);
 
     const shouldShowAISphere = state.toend && aiIn > 0;
     if (state.aiSphereVisible !== shouldShowAISphere || state.glowOpacity > 0 || aiIn > 0) {
       state.aiSphereVisible = shouldShowAISphere;
-      onTransitionChange({
+      emitTransitionChange({
         glowOpacity: state.toend ? state.glowOpacity : 0,
         aiOpacity: state.toend ? aiIn : 0,
       });
@@ -180,7 +221,7 @@ export function createOs1Animation(
 
     if (revealProgress <= 0 || !state.toend) {
       state.glowOpacity = 0;
-      onTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
+      emitTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
     }
 
     ribbon.rotation.x += (rotatevalue + acceleration) * deltaFrames;
@@ -188,7 +229,10 @@ export function createOs1Animation(
     outerGlow.rotation.x = ribbon.rotation.x;
 
     renderer.render(scene, camera);
-    frameId = window.requestAnimationFrame(render);
+    const settledAtEnd = state.toend && state.animatestep >= totalTransformationFrames;
+    if (!settledAtEnd) {
+      queueFrame();
+    }
   };
 
   render();
@@ -198,15 +242,28 @@ export function createOs1Animation(
       state.toend = active;
       if (!active && state.aiSphereVisible) {
         state.aiSphereVisible = false;
-        onTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
+        emitTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
+      }
+      if (!frameScheduled) {
+        lastFrameTime = null;
+        queueFrame();
       }
     },
     dispose() {
-      window.cancelAnimationFrame(frameId);
+      if (frameScheduled) {
+        window.cancelAnimationFrame(frameId);
+        frameScheduled = false;
+      }
       window.removeEventListener('resize', updateSize);
+      ribbon.geometry.dispose();
+      glow.geometry.dispose();
+      outerGlow.geometry.dispose();
+      ribbonMaterial.dispose();
+      glowMaterial.dispose();
+      outerGlowMaterial.dispose();
       renderer.dispose();
       wrapper.innerHTML = '';
-      onTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
+      emitTransitionChange({ glowOpacity: 0, aiOpacity: 0 });
     },
   };
 }

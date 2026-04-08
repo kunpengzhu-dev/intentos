@@ -40,6 +40,7 @@ function normalizeSuggestionPrompt(message: string): string {
 
 export function App() {
   const boot = useBackendBoot();
+  const appShellRef = useRef<HTMLDivElement>(null);
   const initialShouldShowBoot = useRef(shouldShowBoot(window.location.search)).current;
   const [booted, setBooted] = useState(() => !initialShouldShowBoot);
   const [route, setRoute] = useState<Route>({ page: 'home' });
@@ -92,16 +93,18 @@ export function App() {
       : null;
 
   return (
-    <div className="relative isolate h-full w-full overflow-hidden">
+    <div ref={appShellRef} className="relative isolate h-full w-full overflow-hidden">
       {!booted ? (
         <BootPage
           phase={boot.phase}
           progress={boot.progress}
           gatewayState={boot.gatewayState}
+          deploymentSummary={boot.deploymentSummary}
           failureText={boot.failureText}
           currentStepLabel={boot.currentStepLabel}
           onReady={handleBootReady}
           onOrbTransitionChange={handleOrbTransitionChange}
+          transitionHostRef={appShellRef}
         />
       ) : (
         <>

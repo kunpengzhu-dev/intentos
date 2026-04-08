@@ -1,15 +1,13 @@
 import { motion, type MotionValue } from 'framer-motion';
 import { bootOrbTokens } from '../../../ui/tokens';
 import { useRef } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 
 type Bounds = { left: number; right: number; top: number; bottom: number };
 
 export function OrbSphere({
   isReady,
   cornered,
-  visibleOpacity,
-  stageScale,
   dragX,
   dragY,
   dragBounds,
@@ -20,8 +18,6 @@ export function OrbSphere({
 }: {
   isReady: boolean;
   cornered: boolean;
-  visibleOpacity: number;
-  stageScale: number;
   dragX: MotionValue<number>;
   dragY: MotionValue<number>;
   dragBounds: Bounds;
@@ -31,11 +27,17 @@ export function OrbSphere({
   children?: ReactNode;
 }) {
   const dragSuppressClickRef = useRef(false);
+  const stageStyle: CSSProperties = cornered
+    ? { opacity: 1, transform: 'scale(1)' }
+    : {
+        opacity: 'var(--boot-ai-opacity, 0)',
+        transform: 'scale(calc(0.92 + var(--boot-ai-opacity, 0) * 0.08))',
+      };
 
   return (
     <div
       className={`ai-sphere-stage active ${cornered ? 'to-corner' : ''} ${isReady ? 'ai-sphere-stage--interactive' : ''}`}
-      style={{ opacity: visibleOpacity, transform: `scale(${stageScale})` }}
+      style={stageStyle}
     >
       <div className="ai-sphere-shell">
         <motion.div

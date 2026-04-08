@@ -31,8 +31,6 @@ export function Orb({
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isReady = transition.mode === 'ready' && Boolean(intentKey);
-  const visibleOpacity = transition.cornered ? 1 : transition.opacity;
-  const stageScale = transition.cornered ? 1 : 0.92 + transition.opacity * 0.08;
   const { dragX, dragY, dragBounds, onDragEnd } = useOrbDrag({
     isReady,
     cornered: transition.cornered,
@@ -187,8 +185,6 @@ export function Orb({
       <OrbSphere
         isReady={isReady}
         cornered={transition.cornered}
-        visibleOpacity={visibleOpacity}
-        stageScale={stageScale}
         dragX={dragX}
         dragY={dragY}
         dragBounds={dragBounds}

@@ -10,7 +10,7 @@ export const bootOrbTokens = {
       panelFadeDelayMs: 260,
       orientationDurationMs: 4000,
       postTurnSpinMs: -750,
-      revealDurationMs: 400,
+      revealDurationMs: 700,
       backgroundRevealDelayMs: 2000,
       cornerDelayMs: 260,
       readyDelayMs: 800,

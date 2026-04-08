@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { RefObject } from 'react';
 import mercuryBackground from '../../assets/backgrounds/mercury-background.jpg';
 import type { OrbTransitionState } from '../orb/types';
 import { BootLoadingPanel } from './components/BootLoadingPanel';
@@ -9,29 +10,34 @@ export function BootPage({
   phase,
   progress,
   gatewayState,
+  deploymentSummary,
   failureText,
   currentStepLabel,
   onReady,
   onOrbTransitionChange,
+  transitionHostRef,
 }: {
   phase: 'checking' | 'ready' | 'failed';
   progress: number;
   gatewayState: string;
+  deploymentSummary: string;
   failureText: string;
   currentStepLabel: string;
   onReady: () => void;
   onOrbTransitionChange: (next: Partial<OrbTransitionState>) => void;
+  transitionHostRef: RefObject<HTMLElement | null>;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const effectiveProgress = phase === 'ready' ? 1 : progress;
-  const { transitionState } = useOs1Animation({
+  const { transitionStateRef } = useOs1Animation({
     wrapRef,
+    transitionHostRef,
     transformed: effectiveProgress >= 1 && phase !== 'failed',
   });
   const { loadingPanelHidden, welcomeText, welcomeTone, backgroundRevealed } =
     useBootVisualSequence({
       phase,
-      transitionState,
+      transitionStateRef,
       onReady,
       onOrbTransitionChange,
     });
@@ -55,11 +61,7 @@ export function BootPage({
         className={`final-background ${backgroundRevealed ? 'reveal' : ''}`}
       />
 
-      <div
-        className="transition-glow-stage"
-        aria-hidden="true"
-        style={{ opacity: transitionState.glowOpacity }}
-      >
+      <div className="transition-glow-stage" aria-hidden="true">
         <div className="transition-glow-sphere" />
       </div>
 
@@ -74,6 +76,7 @@ export function BootPage({
         loadingLabel={loadingLabel}
         percentageLabel={percentageLabel}
         progress={effectiveProgress}
+        deploymentSummary={deploymentSummary}
         failureText={failureText}
         isFailed={phase === 'failed'}
         isConnected={gatewayState === 'connected'}

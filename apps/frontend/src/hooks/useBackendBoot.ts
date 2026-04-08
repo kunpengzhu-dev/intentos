@@ -14,6 +14,7 @@ type BootCheck = {
 
 const bootScript: Array<Pick<BootCheck, 'id' | 'label' | 'weight'>> = [
   { id: 'backend', label: 'Connecting to backend', weight: 2 },
+  { id: 'deployment', label: 'Reading deployment state', weight: 1 },
   { id: 'gateway', label: 'Reading gateway state', weight: 1 },
   { id: 'orb', label: 'Loading orb intent', weight: 2 },
 ];
@@ -60,6 +61,7 @@ export function useBackendBoot() {
   const [checks, setChecks] = useState<BootCheck[]>(() => createInitialChecks());
   const [failureText, setFailureText] = useState('');
   const [gatewayState, setGatewayState] = useState('connecting');
+  const [deploymentSummary, setDeploymentSummary] = useState('');
   const [orbIntentKey, setOrbIntentKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +79,7 @@ export function useBackendBoot() {
       setFailureText('');
       setChecks(createInitialChecks());
       setGatewayState('connecting');
+      setDeploymentSummary('');
 
       try {
         currentStepId = 'backend';
@@ -87,6 +90,11 @@ export function useBackendBoot() {
         }
 
         setChecks((current) => updateCheckState(current, 'backend', 'ok'));
+        currentStepId = 'deployment';
+        setChecks((current) => updateCheckState(current, 'deployment', 'running'));
+        setDeploymentSummary(health.deployment.summary);
+        setChecks((current) => updateCheckState(current, 'deployment', 'ok'));
+
         currentStepId = 'gateway';
         setChecks((current) => updateCheckState(current, 'gateway', 'running'));
         setGatewayState(health.gateway.connectionState);
@@ -150,6 +158,7 @@ export function useBackendBoot() {
     failureText,
     currentStepLabel: currentStepLabel ?? 'Loading',
     gatewayState,
+    deploymentSummary,
     orbIntentKey,
   };
 }

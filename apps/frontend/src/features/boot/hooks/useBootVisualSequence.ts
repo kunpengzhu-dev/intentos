@@ -1,27 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 import type { OrbTransitionState } from '../../orb/types';
 import { BOOT_SEQUENCE, INTRO_TEXT, WELCOME_TEXT } from '../constants';
+import type { TransitionState } from '../os1-animation';
 
 type BootPhase = 'checking' | 'ready' | 'failed';
 
-type TransitionState = {
-  glowOpacity: number;
-  aiOpacity: number;
-};
-
 export function useBootVisualSequence({
   phase,
-  transitionState,
+  transitionStateRef,
   onReady,
   onOrbTransitionChange,
 }: {
   phase: BootPhase;
-  transitionState: TransitionState;
+  transitionStateRef: MutableRefObject<TransitionState>;
   onReady: () => void;
   onOrbTransitionChange: (next: Partial<OrbTransitionState>) => void;
 }) {
   const sequenceStarted = useRef(false);
-  const aiOpacityRef = useRef(0);
   const orbCorneredRef = useRef(false);
 
   const [loadingPanelHidden, setLoadingPanelHidden] = useState(false);
@@ -40,20 +36,16 @@ export function useBootVisualSequence({
   };
 
   useEffect(() => {
-    aiOpacityRef.current = transitionState.aiOpacity;
-  }, [transitionState.aiOpacity]);
-
-  useEffect(() => {
     orbCorneredRef.current = orbCornered;
   }, [orbCornered]);
 
   useEffect(() => {
     onOrbTransitionChange({
       mode: 'boot',
-      opacity: orbCornered ? 1 : transitionState.aiOpacity,
+      opacity: orbCornered ? 1 : 0,
       cornered: orbCornered,
     });
-  }, [onOrbTransitionChange, orbCornered, transitionState.aiOpacity]);
+  }, [onOrbTransitionChange, orbCornered]);
 
   useEffect(() => {
     if (phase === 'failed') {
@@ -82,7 +74,7 @@ export function useBootVisualSequence({
       if (cancelled) return;
       setLoadingPanelHidden(true);
 
-      await waitFor(() => aiOpacityRef.current >= 0.9 && !orbCorneredRef.current);
+      await waitFor(() => transitionStateRef.current.aiOpacity >= 0.9 && !orbCorneredRef.current);
       if (cancelled) return;
 
       await sleep(BOOT_SEQUENCE.text.introDelayMs);
@@ -107,7 +99,7 @@ export function useBootVisualSequence({
       if (cancelled) return;
       setWelcomeText('');
 
-      await waitFor(() => aiOpacityRef.current >= 0.9 && !orbCorneredRef.current);
+      await waitFor(() => transitionStateRef.current.aiOpacity >= 0.9 && !orbCorneredRef.current);
       if (cancelled) return;
       setBackgroundRevealed(true);
 
@@ -126,7 +118,7 @@ export function useBootVisualSequence({
     return () => {
       cancelled = true;
     };
-  }, [onReady, phase]);
+  }, [onReady, phase, transitionStateRef]);
 
   return {
     loadingPanelHidden,
