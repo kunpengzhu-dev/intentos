@@ -52,6 +52,10 @@ export class IntentCoordinator {
     return this.options.gateway.getConnectionState();
   }
 
+  getOrbIntentKey() {
+    return this.options.orbIntentKey;
+  }
+
   async listIntents(params: {
     includePreview?: boolean;
     previewLimit?: number;
@@ -109,16 +113,22 @@ export class IntentCoordinator {
     } = {},
   ): Promise<IntentView> {
     const catalog = await this.options.gateway.listIntents();
+    const missingOrbIntent = this.isMissingOrbIntentInCatalog(catalog, intentKey);
     const [intent, history] = await Promise.all([
       this.buildIntentDetail(catalog, intentKey, {
         includePreview: params.includePreview ?? true,
         previewLimit: params.previewLimit,
         previewMaxChars: params.previewMaxChars,
       }),
-      this.options.gateway.readIntentMessages({
-        intentKey,
-        limit: params.limit ?? this.options.defaultHistoryLimit,
-      }),
+      missingOrbIntent
+        ? Promise.resolve({
+            intentKey,
+            messages: [],
+          })
+        : this.options.gateway.readIntentMessages({
+            intentKey,
+            limit: params.limit ?? this.options.defaultHistoryLimit,
+          }),
     ]);
 
     return {
@@ -132,12 +142,18 @@ export class IntentCoordinator {
     params: { limit?: number } = {},
   ): Promise<IntentMessagesResponse> {
     const catalog = await this.options.gateway.listIntents();
+    const missingOrbIntent = this.isMissingOrbIntentInCatalog(catalog, intentKey);
     const [intent, history] = await Promise.all([
       this.buildIntentDetail(catalog, intentKey),
-      this.options.gateway.readIntentMessages({
-        intentKey,
-        limit: params.limit ?? this.options.defaultHistoryLimit,
-      }),
+      missingOrbIntent
+        ? Promise.resolve({
+            intentKey,
+            messages: [],
+          })
+        : this.options.gateway.readIntentMessages({
+            intentKey,
+            limit: params.limit ?? this.options.defaultHistoryLimit,
+          }),
     ]);
 
     return {
@@ -173,7 +189,22 @@ export class IntentCoordinator {
     intentKey: string,
     payload: SendIntentMessageRequest,
   ): Promise<SendIntentMessageResponse> {
-    const intent = await this.getIntent(intentKey);
+    const catalog = await this.options.gateway.listIntents();
+    const missingOrbIntent = this.isMissingOrbIntentInCatalog(catalog, intentKey);
+    const fallbackIntent = await this.buildIntentDetail(catalog, intentKey, {
+      includePreview: true,
+    });
+    const resolveIntent = async () => {
+      try {
+        return await this.getIntent(intentKey, { includePreview: true });
+      } catch (error) {
+        if (missingOrbIntent && error instanceof IntentNotFoundError) {
+          return fallbackIntent;
+        }
+        throw error;
+      }
+    };
+
     if (payload.waitForFinal) {
       const result = await this.options.gateway.sendIntentMessageAndWait({
         intentKey,
@@ -185,7 +216,7 @@ export class IntentCoordinator {
 
       const finalEvent = this.mapper.toIntentEvent(intentKey, result.final);
       return {
-        intent,
+        intent: await resolveIntent(),
         runId: result.ack.runId,
         accepted: true,
         finalState: result.final.state,
@@ -202,7 +233,7 @@ export class IntentCoordinator {
     });
 
     return {
-      intent,
+      intent: await resolveIntent(),
       runId: ack.runId,
       accepted: true,
     };
@@ -294,7 +325,7 @@ export class IntentCoordinator {
     listener: (event: IntentStreamEvent) => void,
   ): Promise<() => void> {
     const catalog = await this.options.gateway.listIntents();
-    this.findIntentRecord(catalog, intentKey);
+    this.resolveIntentRecord(catalog, intentKey);
     const projector = new IntentStreamProjector({
       intentKey,
       mapper: this.mapper,
@@ -338,7 +369,7 @@ export class IntentCoordinator {
       previewMaxChars?: number;
     } = {},
   ): Promise<IntentDetail> {
-    const record = this.findIntentRecord(catalog, intentKey);
+    const record = this.resolveIntentRecord(catalog, intentKey);
     const preview = params.includePreview
       ? (
           await this.options.gateway.previewIntents({
@@ -350,6 +381,33 @@ export class IntentCoordinator {
       : undefined;
 
     return this.mapper.toIntentDetail(record, catalog.defaults, preview);
+  }
+
+  private isOrbIntentKey(intentKey: string) {
+    return intentKey === this.options.orbIntentKey;
+  }
+
+  private isMissingOrbIntentInCatalog(catalog: RuntimeIntentCatalog, intentKey: string) {
+    return this.isOrbIntentKey(intentKey) && !catalog.intents.some((candidate) => candidate.key === intentKey);
+  }
+
+  private createSyntheticOrbRecord(): RuntimeIntentRecord {
+    return {
+      key: this.options.orbIntentKey,
+      title: "Orb",
+      updatedAt: null,
+    };
+  }
+
+  private resolveIntentRecord(catalog: RuntimeIntentCatalog, intentKey: string): RuntimeIntentRecord {
+    const record = catalog.intents.find((candidate) => candidate.key === intentKey);
+    if (record) {
+      return record;
+    }
+    if (this.isOrbIntentKey(intentKey)) {
+      return this.createSyntheticOrbRecord();
+    }
+    throw new IntentNotFoundError(intentKey);
   }
 
   private findIntentRecord(catalog: RuntimeIntentCatalog, intentKey: string): RuntimeIntentRecord {

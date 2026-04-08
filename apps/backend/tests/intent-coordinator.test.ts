@@ -14,6 +14,8 @@ import { IntentCoordinator } from "../src/intent-coordinator.js";
 
 class FakeIntentGateway implements IntentRuntimeGateway {
   listCalls = 0;
+  readCalls = 0;
+  sendCalls = 0;
   private streamListener: ((payload: RuntimeIntentStreamEvent) => void) | null = null;
 
   constructor(
@@ -36,10 +38,12 @@ class FakeIntentGateway implements IntentRuntimeGateway {
   }
 
   async readIntentMessages(): Promise<RuntimeIntentHistory> {
+    this.readCalls += 1;
     return this.history;
   }
 
   async sendIntentMessage() {
+    this.sendCalls += 1;
     return { runId: "run-1", status: "accepted" };
   }
 
@@ -216,6 +220,71 @@ test("reuses one catalog read for getIntentView", async () => {
 
   assert.equal(result.intent.key, "agent:main:main");
   assert.equal(gateway.listCalls, 1);
+});
+
+test("returns a synthetic orb detail when the configured orb intent is missing", async () => {
+  const gateway = new FakeIntentGateway(
+    {
+      defaults: {
+        modelProvider: "openai",
+        model: "gpt-5.4",
+        contextTokens: 200_000,
+      },
+      intents: [],
+    },
+    {
+      intentKey: "agent:main:main",
+      messages: [],
+    },
+    [],
+  );
+  const coordinator = new IntentCoordinator({
+    gateway,
+    orbIntentKey: "agent:main:main",
+    defaultHistoryLimit: 50,
+    defaultPreviewLimit: 5,
+    defaultPreviewMaxChars: 500,
+  });
+
+  const result = await coordinator.getIntentView("agent:main:main");
+
+  assert.equal(result.intent.key, "agent:main:main");
+  assert.equal(result.intent.kind, "orb");
+  assert.equal(result.intent.title, "Orb");
+  assert.deepEqual(result.messages, []);
+  assert.equal(gateway.readCalls, 0);
+});
+
+test("allows sending the first message to a missing orb intent", async () => {
+  const gateway = new FakeIntentGateway(
+    {
+      defaults: {
+        modelProvider: "openai",
+        model: "gpt-5.4",
+        contextTokens: 200_000,
+      },
+      intents: [],
+    },
+    {
+      intentKey: "agent:main:main",
+      messages: [],
+    },
+    [],
+  );
+  const coordinator = new IntentCoordinator({
+    gateway,
+    orbIntentKey: "agent:main:main",
+    defaultHistoryLimit: 50,
+    defaultPreviewLimit: 5,
+    defaultPreviewMaxChars: 500,
+  });
+
+  const result = await coordinator.sendMessage("agent:main:main", { text: "hello" });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.intent.key, "agent:main:main");
+  assert.equal(result.intent.kind, "orb");
+  assert.equal(gateway.sendCalls, 1);
 });
 
 test("projects normalized stream events for a visible main-session run", async () => {
