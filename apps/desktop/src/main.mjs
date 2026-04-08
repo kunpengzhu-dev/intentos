@@ -187,6 +187,11 @@ function stopEmbeddedBackend() {
 }
 
 function createMainWindow(backendUrl) {
+  const additionalArguments = [`--intentos-backend-url=${backendUrl}`];
+  if (rendererUrl) {
+    additionalArguments.push('--intentos-use-relative-api=1');
+  }
+
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -198,7 +203,7 @@ function createMainWindow(backendUrl) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      additionalArguments: [`--intentos-backend-url=${backendUrl}`],
+      additionalArguments,
     },
   });
 

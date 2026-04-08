@@ -361,9 +361,12 @@ export async function registerIntentRoutes(
       },
     },
     async (request, reply) => {
+      const origin = request.headers.origin;
       reply.raw.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       reply.raw.setHeader("Cache-Control", "no-cache, no-transform");
       reply.raw.setHeader("Connection", "keep-alive");
+      reply.raw.setHeader("Access-Control-Allow-Origin", origin ?? "*");
+      reply.raw.setHeader("Vary", "Origin");
       reply.raw.flushHeaders();
 
       const unsubscribe = await coordinator.subscribeToIntentEvents(

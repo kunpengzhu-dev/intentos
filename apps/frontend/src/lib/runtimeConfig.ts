@@ -1,5 +1,6 @@
 type DesktopBridge = {
   apiBaseUrl?: string;
+  useRelativeApi?: boolean;
 };
 
 function readDesktopBridge(): DesktopBridge | undefined {
@@ -21,7 +22,12 @@ function trimTrailingSlash(value: string): string {
 }
 
 export function getBackendBaseUrl(): string | null {
-  const candidate = readDesktopBridge()?.apiBaseUrl;
+  const desktopBridge = readDesktopBridge();
+  if (desktopBridge?.useRelativeApi) {
+    return null;
+  }
+
+  const candidate = desktopBridge?.apiBaseUrl;
   if (!candidate) return null;
 
   const normalized = trimTrailingSlash(candidate);
