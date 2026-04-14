@@ -5,7 +5,7 @@ export function BootLoadingPanel({
   loadingLabel,
   percentageLabel,
   progress,
-  deploymentSummary,
+  setupSummary,
   failureText,
   isFailed,
   isConnected,
@@ -14,7 +14,7 @@ export function BootLoadingPanel({
   loadingLabel: string;
   percentageLabel: string;
   progress: number;
-  deploymentSummary: string;
+  setupSummary: string;
   failureText: string;
   isFailed: boolean;
   isConnected: boolean;
@@ -33,8 +33,8 @@ export function BootLoadingPanel({
         />
       </div>
       {isFailed && <div className="loading-error">{failureText}</div>}
-      {!isFailed && deploymentSummary && <div className="loading-hint">{deploymentSummary}</div>}
-      {!isConnected && !isFailed && !deploymentSummary && (
+      {!isFailed && setupSummary && <div className="loading-hint">{setupSummary}</div>}
+      {!isConnected && !isFailed && !setupSummary && (
         <div className="loading-hint">Connecting to server...</div>
       )}
     </div>

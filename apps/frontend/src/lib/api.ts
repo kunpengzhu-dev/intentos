@@ -1,4 +1,7 @@
 import type {
+  BootSetupEvent,
+  BootSetupStatus,
+  HealthResponse,
   IntentDetailResponse,
   IntentListResponse,
   IntentStreamEvent,
@@ -7,13 +10,6 @@ import type {
   SendIntentMessageResponse,
 } from '@intentos/shared';
 import { resolveBackendUrl } from './runtimeConfig';
-
-type HealthResponse = {
-  ok: boolean;
-  gateway: {
-    connectionState: string;
-  };
-};
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(resolveBackendUrl(path), {
@@ -42,6 +38,31 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function fetchHealth(): Promise<HealthResponse> {
   return requestJson<HealthResponse>('/api/health');
+}
+
+export async function fetchBootSetupStatus(): Promise<BootSetupStatus> {
+  return requestJson<BootSetupStatus>('/api/boot/status');
+}
+
+export function subscribeToBootSetupEvents(
+  listener: (event: BootSetupEvent) => void,
+  onError?: (error: Event) => void,
+): () => void {
+  const source = new EventSource(resolveBackendUrl('/api/boot/events'));
+
+  const handleMessage = (rawEvent: MessageEvent<string>) => {
+    const payload = JSON.parse(rawEvent.data) as BootSetupEvent;
+    listener(payload);
+  };
+
+  source.addEventListener('boot-status', handleMessage as EventListener);
+  source.onerror = (event) => {
+    onError?.(event);
+  };
+
+  return () => {
+    source.close();
+  };
 }
 
 export async function fetchOrbIntent() {

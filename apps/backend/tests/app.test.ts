@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createApp } from "../src/app.js";
+import type { BackendConfig } from "../src/config/env.js";
+import { BootSetupManager } from "../src/domain/boot-setup.js";
 import { IntentCoordinator } from "../src/intent-coordinator.js";
 import type {
   IntentRuntimeConnectionState,
@@ -84,6 +86,37 @@ class MinimalGateway implements IntentRuntimeGateway {
   }
 }
 
+class MissingOrbGateway extends MinimalGateway {
+  async listIntents() {
+    return {
+      defaults: {
+        modelProvider: null,
+        model: null,
+        contextTokens: null,
+      },
+      intents: [],
+    };
+  }
+}
+
+function createTestConfig(): BackendConfig {
+  return {
+    host: "localhost",
+    port: 3030,
+    corsOrigin: true,
+    gatewayUrl: "ws://localhost:18789",
+    orbIntentKey: "agent:main:main",
+    defaultHistoryLimit: 50,
+    defaultPreviewLimit: 5,
+    defaultPreviewMaxChars: 500,
+    rootDir: process.cwd(),
+  };
+}
+
+function createTestBootSetupManager(): BootSetupManager {
+  return new BootSetupManager();
+}
+
 test("health route exposes gateway state", async () => {
   const coordinator = new IntentCoordinator({
     gateway: new MinimalGateway(),
@@ -94,18 +127,9 @@ test("health route exposes gateway state", async () => {
   });
 
   const app = await createApp({
-    config: {
-      host: "localhost",
-      port: 3030,
-      corsOrigin: true,
-      gatewayUrl: "ws://localhost:18789",
-      orbIntentKey: "agent:main:main",
-      defaultHistoryLimit: 50,
-      defaultPreviewLimit: 5,
-      defaultPreviewMaxChars: 500,
-      rootDir: process.cwd(),
-    },
+    config: createTestConfig(),
     coordinator,
+    bootSetupManager: createTestBootSetupManager(),
   });
 
   const response = await app.inject({
@@ -124,6 +148,59 @@ test("health route exposes gateway state", async () => {
   await app.close();
 });
 
+test("boot status route exposes boot setup state", async () => {
+  const coordinator = new IntentCoordinator({
+    gateway: new MinimalGateway(),
+    orbIntentKey: "agent:main:main",
+    defaultHistoryLimit: 50,
+    defaultPreviewLimit: 5,
+    defaultPreviewMaxChars: 500,
+  });
+
+  const app = await createApp({
+    config: createTestConfig(),
+    coordinator,
+    bootSetupManager: createTestBootSetupManager(),
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/boot/status",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    enabled: true,
+    phase: "idle",
+    summary: "Boot will simulate installing one package and then run two setup commands.",
+    packageName: "@intentos/boot-runtime",
+    steps: [
+      {
+        id: "install-package",
+        label: "Installing @intentos/boot-runtime",
+        durationMs: 2000,
+        state: "pending",
+      },
+      {
+        id: "run-command-1",
+        label: "Running setup command 1: bootstrap-runtime",
+        command: "bootstrap-runtime",
+        durationMs: 2000,
+        state: "pending",
+      },
+      {
+        id: "run-command-2",
+        label: "Running setup command 2: start-intent-bridge",
+        command: "start-intent-bridge",
+        durationMs: 2000,
+        state: "pending",
+      },
+    ],
+  });
+
+  await app.close();
+});
+
 test("swagger json route exposes openapi document", async () => {
   const coordinator = new IntentCoordinator({
     gateway: new MinimalGateway(),
@@ -134,18 +211,9 @@ test("swagger json route exposes openapi document", async () => {
   });
 
   const app = await createApp({
-    config: {
-      host: "localhost",
-      port: 3030,
-      corsOrigin: true,
-      gatewayUrl: "ws://localhost:18789",
-      orbIntentKey: "agent:main:main",
-      defaultHistoryLimit: 50,
-      defaultPreviewLimit: 5,
-      defaultPreviewMaxChars: 500,
-      rootDir: process.cwd(),
-    },
+    config: createTestConfig(),
     coordinator,
+    bootSetupManager: createTestBootSetupManager(),
   });
 
   const response = await app.inject({
@@ -171,18 +239,9 @@ test("root route serves the orb chat frontend", async () => {
   });
 
   const app = await createApp({
-    config: {
-      host: "localhost",
-      port: 3030,
-      corsOrigin: true,
-      gatewayUrl: "ws://localhost:18789",
-      orbIntentKey: "agent:main:main",
-      defaultHistoryLimit: 50,
-      defaultPreviewLimit: 5,
-      defaultPreviewMaxChars: 500,
-      rootDir: process.cwd(),
-    },
+    config: createTestConfig(),
     coordinator,
+    bootSetupManager: createTestBootSetupManager(),
   });
 
   const response = await app.inject({
@@ -193,6 +252,41 @@ test("root route serves the orb chat frontend", async () => {
   assert.equal(response.statusCode, 200);
   assert.match(response.headers["content-type"] ?? "", /text\/html/);
   assert.match(response.body, /Orb Chat/);
+
+  await app.close();
+});
+
+test("orb route returns a synthetic orb detail when the configured orb intent is missing", async () => {
+  const coordinator = new IntentCoordinator({
+    gateway: new MissingOrbGateway(),
+    orbIntentKey: "agent:main:main",
+    defaultHistoryLimit: 50,
+    defaultPreviewLimit: 5,
+    defaultPreviewMaxChars: 500,
+  });
+
+  const app = await createApp({
+    config: createTestConfig(),
+    coordinator,
+    bootSetupManager: createTestBootSetupManager(),
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/orb",
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as {
+    intent?: {
+      key?: string;
+      kind?: string;
+      title?: string;
+    };
+  };
+  assert.equal(body.intent?.key, "agent:main:main");
+  assert.equal(body.intent?.kind, "orb");
+  assert.equal(body.intent?.title, "Orb");
 
   await app.close();
 });
@@ -230,18 +324,9 @@ test("view route preserves toolcall ids in serialized history", async () => {
   });
 
   const app = await createApp({
-    config: {
-      host: "localhost",
-      port: 3030,
-      corsOrigin: true,
-      gatewayUrl: "ws://localhost:18789",
-      orbIntentKey: "agent:main:main",
-      defaultHistoryLimit: 50,
-      defaultPreviewLimit: 5,
-      defaultPreviewMaxChars: 500,
-      rootDir: process.cwd(),
-    },
+    config: createTestConfig(),
     coordinator,
+    bootSetupManager: createTestBootSetupManager(),
   });
 
   const response = await app.inject({

@@ -6,8 +6,10 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { OpenClawGatewayClient } from "openclaw-gateway-client";
 import { OpenClawIntentRuntimeGateway } from "./adapters/openclaw/openclaw-intent-runtime-gateway.js";
 import type { BackendConfig } from "./config/env.js";
+import { BootSetupManager } from "./domain/boot-setup.js";
 import { IntentNotFoundError } from "./domain/errors.js";
 import { IntentCoordinator } from "./intent-coordinator.js";
+import { registerBootRoutes } from "./routes/boot.js";
 import { registerFrontendRoutes } from "./routes/frontend.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerIntentRoutes } from "./routes/intents.js";
@@ -15,6 +17,7 @@ import { registerIntentRoutes } from "./routes/intents.js";
 export type CreateAppOptions = {
   config: BackendConfig;
   coordinator?: IntentCoordinator;
+  bootSetupManager: BootSetupManager;
 };
 
 function createDefaultCoordinator(config: BackendConfig): IntentCoordinator {
@@ -50,6 +53,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   });
 
   const coordinator = options.coordinator ?? createDefaultCoordinator(options.config);
+  const { bootSetupManager } = options;
 
   await app.register(cors, {
     origin: options.config.corsOrigin,
@@ -89,6 +93,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   });
 
   await registerHealthRoutes(app, coordinator);
+  await registerBootRoutes(app, bootSetupManager);
   await registerIntentRoutes(app, coordinator);
   await registerFrontendRoutes(app, { rootDir: options.config.rootDir });
 

@@ -5,6 +5,9 @@ type SchemaTarget = {
 export const intentApiSchemaRef = {
   error: "IntentosErrorResponse",
   health: "IntentosHealthResponse",
+  bootSetupStep: "BootSetupStep",
+  bootSetupStatus: "BootSetupStatus",
+  bootSetupEvent: "BootSetupEvent",
   intentOrigin: "IntentOrigin",
   intentDelivery: "IntentDelivery",
   intentLineage: "IntentLineage",
@@ -60,6 +63,47 @@ const intentApiSchemas: Record<string, unknown>[] = [
           connectionState: { type: "string" },
         },
       },
+    },
+  },
+  {
+    $id: intentApiSchemaRef.bootSetupStep,
+    type: "object",
+    required: ["id", "label", "durationMs", "state"],
+    properties: {
+      id: { type: "string" },
+      label: { type: "string" },
+      command: { type: "string" },
+      durationMs: { type: "number" },
+      state: { type: "string", enum: ["pending", "running", "completed", "failed"] },
+    },
+  },
+  {
+    $id: intentApiSchemaRef.bootSetupStatus,
+    type: "object",
+    required: ["enabled", "phase", "summary", "steps"],
+    properties: {
+      enabled: { type: "boolean" },
+      phase: {
+        type: "string",
+        enum: ["idle", "installing-package", "running-commands", "ready", "failed"],
+      },
+      summary: { type: "string" },
+      packageName: { type: "string" },
+      steps: {
+        type: "array",
+        items: { $ref: intentApiSchemaRef.bootSetupStep },
+      },
+      currentStepId: { type: "string" },
+      lastError: { type: "string" },
+    },
+  },
+  {
+    $id: intentApiSchemaRef.bootSetupEvent,
+    type: "object",
+    required: ["type", "bootSetup"],
+    properties: {
+      type: { const: "boot-status" },
+      bootSetup: { $ref: intentApiSchemaRef.bootSetupStatus },
     },
   },
   {

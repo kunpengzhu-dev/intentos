@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchHealth, fetchOrbIntent } from '../lib/api';
+import { fetchBootSetupStatus, fetchHealth, fetchOrbIntent, subscribeToBootSetupEvents } from '../lib/api';
+import type { BootSetupStatus, BootSetupStepState } from '@intentos/shared';
 
 type BootPhase = 'checking' | 'ready' | 'failed';
 type BootStepState = 'pending' | 'running' | 'ok' | 'failed';
@@ -14,16 +15,42 @@ type BootCheck = {
 
 const bootScript: Array<Pick<BootCheck, 'id' | 'label' | 'weight'>> = [
   { id: 'backend', label: 'Connecting to backend', weight: 2 },
-  { id: 'deployment', label: 'Reading deployment state', weight: 1 },
   { id: 'gateway', label: 'Reading gateway state', weight: 1 },
   { id: 'orb', label: 'Loading orb intent', weight: 2 },
 ];
 
-function createInitialChecks(): BootCheck[] {
-  return bootScript.map((step) => ({
-    ...step,
-    state: 'pending',
-  }));
+function toCheckState(stepState: BootSetupStepState): BootStepState {
+  switch (stepState) {
+    case 'running':
+      return 'running';
+    case 'completed':
+      return 'ok';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'pending';
+  }
+}
+
+function createChecks(
+  bootSetup?: BootSetupStatus,
+  baseStates: Partial<Record<'backend' | 'gateway' | 'orb', BootStepState>> = {},
+): BootCheck[] {
+  const setupChecks = bootSetup?.enabled
+    ? bootSetup.steps.map((step) => ({
+        id: step.id,
+        label: step.label,
+        weight: Math.max(Math.round(step.durationMs / 1_000), 1),
+        state: toCheckState(step.state),
+      }))
+    : [];
+
+  return [
+    { ...bootScript[0], state: baseStates.backend ?? 'pending' },
+    ...setupChecks,
+    { ...bootScript[1], state: baseStates.gateway ?? 'pending' },
+    { ...bootScript[2], state: baseStates.orb ?? 'pending' },
+  ];
 }
 
 function updateCheckState(
@@ -58,15 +85,16 @@ function calculateProgress(checks: BootCheck[]): number {
 
 export function useBackendBoot() {
   const [phase, setPhase] = useState<BootPhase>('checking');
-  const [checks, setChecks] = useState<BootCheck[]>(() => createInitialChecks());
+  const [checks, setChecks] = useState<BootCheck[]>(() => createChecks());
   const [failureText, setFailureText] = useState('');
   const [gatewayState, setGatewayState] = useState('connecting');
-  const [deploymentSummary, setDeploymentSummary] = useState('');
+  const [setupSummary, setSetupSummary] = useState('');
   const [orbIntentKey, setOrbIntentKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | undefined;
+    let unsubscribeBootEvents: (() => void) | undefined;
 
     async function boot() {
       if (cancelled) {
@@ -77,27 +105,86 @@ export function useBackendBoot() {
 
       setPhase('checking');
       setFailureText('');
-      setChecks(createInitialChecks());
+      setChecks(createChecks());
       setGatewayState('connecting');
-      setDeploymentSummary('');
+      setSetupSummary('');
 
       try {
         currentStepId = 'backend';
         setChecks((current) => updateCheckState(current, 'backend', 'running'));
-        const health = await fetchHealth();
+        const [health, bootSetup] = await Promise.all([fetchHealth(), fetchBootSetupStatus()]);
         if (cancelled) {
           return;
         }
 
-        setChecks((current) => updateCheckState(current, 'backend', 'ok'));
-        currentStepId = 'deployment';
-        setChecks((current) => updateCheckState(current, 'deployment', 'running'));
-        setDeploymentSummary(health.deployment.summary);
-        setChecks((current) => updateCheckState(current, 'deployment', 'ok'));
+        setGatewayState(health.gateway.connectionState);
+        setSetupSummary(bootSetup.summary);
+        setChecks(createChecks(bootSetup, { backend: 'ok' }));
+
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finishResolve = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            resolve();
+          };
+          const finishReject = (error: Error) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            reject(error);
+          };
+
+          if (!bootSetup.enabled || bootSetup.phase === 'ready') {
+            finishResolve();
+            return;
+          }
+
+          if (bootSetup.phase === 'failed') {
+            finishReject(new Error(bootSetup.lastError ?? bootSetup.summary));
+            return;
+          }
+
+          const disconnectWithError = () => {
+            finishReject(new Error('Boot event stream disconnected before setup completed'));
+          };
+
+          unsubscribeBootEvents = subscribeToBootSetupEvents(
+            (event) => {
+              if (cancelled) {
+                return;
+              }
+
+              currentStepId = event.bootSetup.currentStepId ?? currentStepId;
+              setSetupSummary(event.bootSetup.summary);
+              setChecks(createChecks(event.bootSetup, { backend: 'ok' }));
+
+              if (event.bootSetup.phase === 'ready') {
+                unsubscribeBootEvents?.();
+                unsubscribeBootEvents = undefined;
+                finishResolve();
+                return;
+              }
+
+              if (event.bootSetup.phase === 'failed') {
+                unsubscribeBootEvents?.();
+                unsubscribeBootEvents = undefined;
+                finishReject(new Error(event.bootSetup.lastError ?? event.bootSetup.summary));
+              }
+            },
+            () => {
+              unsubscribeBootEvents?.();
+              unsubscribeBootEvents = undefined;
+              disconnectWithError();
+            },
+          );
+        });
 
         currentStepId = 'gateway';
         setChecks((current) => updateCheckState(current, 'gateway', 'running'));
-        setGatewayState(health.gateway.connectionState);
         setChecks((current) => updateCheckState(current, 'gateway', 'ok'));
 
         currentStepId = 'orb';
@@ -129,6 +216,7 @@ export function useBackendBoot() {
 
     return () => {
       cancelled = true;
+      unsubscribeBootEvents?.();
       if (retryTimer !== undefined) {
         window.clearTimeout(retryTimer);
       }
@@ -158,7 +246,7 @@ export function useBackendBoot() {
     failureText,
     currentStepLabel: currentStepLabel ?? 'Loading',
     gatewayState,
-    deploymentSummary,
+    setupSummary,
     orbIntentKey,
   };
 }

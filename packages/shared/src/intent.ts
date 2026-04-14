@@ -345,3 +345,42 @@ export type DeleteIntentResponse = {
   deleted?: boolean;
   archived?: boolean;
 };
+
+export type BootSetupPhase =
+  | "idle"
+  | "installing-package"
+  | "running-commands"
+  | "ready"
+  | "failed";
+
+export type BootSetupStepState = "pending" | "running" | "completed" | "failed";
+
+export type BootSetupStep = {
+  id: string;
+  label: string;
+  command?: string;
+  durationMs: number;
+  state: BootSetupStepState;
+};
+
+export type BootSetupStatus = {
+  enabled: boolean;
+  phase: BootSetupPhase;
+  summary: string;
+  packageName?: string;
+  steps: BootSetupStep[];
+  currentStepId?: string;
+  lastError?: string;
+};
+
+export type BootSetupEvent = {
+  type: "boot-status";
+  bootSetup: BootSetupStatus;
+};
+
+export type HealthResponse = {
+  ok: boolean;
+  gateway: {
+    connectionState: string;
+  };
+};

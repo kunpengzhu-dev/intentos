@@ -99,7 +99,7 @@ export function App() {
           phase={boot.phase}
           progress={boot.progress}
           gatewayState={boot.gatewayState}
-          deploymentSummary={boot.deploymentSummary}
+          setupSummary={boot.setupSummary}
           failureText={boot.failureText}
           currentStepLabel={boot.currentStepLabel}
           onReady={handleBootReady}

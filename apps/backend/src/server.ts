@@ -1,6 +1,6 @@
 import { createLocalArtifactLogger } from "@intentos/shared";
-import { createApp } from "./app.js";
 import { loadBackendConfig } from "./config/env.js";
+import { createBackendRuntime } from "./runtime.js";
 
 async function main(): Promise<void> {
   const config = loadBackendConfig();
@@ -9,7 +9,7 @@ async function main(): Promise<void> {
     name: "intentos-backend",
   });
 
-  const app = await createApp({ config });
+  const { app } = await createBackendRuntime(config);
 
   try {
     await app.listen({

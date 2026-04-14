@@ -66,5 +66,7 @@ pnpm test
 
 - Backend defaults to `http://localhost:3030`
 - Frontend dev server defaults to `http://localhost:5173`
-- Web frontend now assumes same-origin deployment and calls relative `/api/...` paths by default; in dev, Vite proxies `/api` to `http://localhost:3030`, and in same-origin production the browser sends `/api` back to the backend host that served the page.
+- Web frontend calls relative `/api/...` paths by default; in dev, Vite proxies `/api` to `http://localhost:3030`
 - `VITE_BOOT_ALWAYS_SHOW=1` keeps the boot sequence visible on every launch
+- Boot simulation is hardcoded in `apps/backend/src/domain/boot-setup.ts`
+- `/api/health` only reports backend health; boot state is exposed separately via `/api/boot/status` and `/api/boot/events`

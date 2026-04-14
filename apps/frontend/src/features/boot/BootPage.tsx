@@ -10,7 +10,7 @@ export function BootPage({
   phase,
   progress,
   gatewayState,
-  deploymentSummary,
+  setupSummary,
   failureText,
   currentStepLabel,
   onReady,
@@ -20,7 +20,7 @@ export function BootPage({
   phase: 'checking' | 'ready' | 'failed';
   progress: number;
   gatewayState: string;
-  deploymentSummary: string;
+  setupSummary: string;
   failureText: string;
   currentStepLabel: string;
   onReady: () => void;
@@ -76,7 +76,7 @@ export function BootPage({
         loadingLabel={loadingLabel}
         percentageLabel={percentageLabel}
         progress={effectiveProgress}
-        deploymentSummary={deploymentSummary}
+        setupSummary={setupSummary}
         failureText={failureText}
         isFailed={phase === 'failed'}
         isConnected={gatewayState === 'connected'}
